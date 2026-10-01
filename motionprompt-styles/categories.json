@@ -1,0 +1,32 @@
+{
+  "motionprompt-typography-social": {
+    "title": "Typography & social",
+    "intent": "text-led clips for hooks, quotes, announcements, chats, podcasts, sale promos and bold poster-style titles",
+    "slugs": ["kinetic-type", "glitch", "neon-sign", "chat-story", "podcast-audiogram", "sale-countdown", "comic-pop-art", "swiss-geometric"]
+  },
+  "motionprompt-retro-cinematic": {
+    "title": "Retro & cinematic",
+    "intent": "nostalgic, film, arcade and sci-fi looks: synthwave, monster movie, old tapes and archives, pixel games, chrome, noir tech, neon HUD",
+    "slugs": ["retro-synthwave", "kaiju-attack", "nostalgia-90s", "vintage-archive", "pixel-art", "y2k-chrome", "tech-noir", "neon-tech"]
+  },
+  "motionprompt-handmade-illustrated": {
+    "title": "Handmade & illustrated",
+    "intent": "crafted and drawn worlds: paper cut-out, clay, kawaii, whiteboard doodles, flat vector, watercolour, isometric dioramas, wedding invitations",
+    "slugs": ["paper-cutout", "claymation", "kawaii-pastel", "whiteboard-sketch", "flat-illustration", "watercolour-ink", "isometric-diorama", "elegant-wedding"]
+  },
+  "motionprompt-explainer-data": {
+    "title": "Explainer & data",
+    "intent": "numbers, infographics, slide decks, maps and property tours that explain something",
+    "slugs": ["infographic", "radial-infographic", "data-story", "slide-deck", "map-journey", "property-tour"]
+  },
+  "motionprompt-product-brand": {
+    "title": "Product, brand & backgrounds",
+    "intent": "logo stings, product and app showcases, 3D icons, portfolios, photo reels and abstract looping backgrounds",
+    "slugs": ["logo-spin-3d", "product-turntable", "app-showcase", "floating-3d-icons", "editorial-portfolio", "photo-studio", "photo-slideshow", "liquid-gradient", "particle-field"]
+  },
+  "motionprompt-malaysia-festive": {
+    "title": "Malaysia & festive",
+    "intent": "Malaysian culture and festivals: Raya, Deepavali, Chinese New Year, Merdeka, batik, kopitiam, pasar malam, kampung, Borneo, food menus",
+    "slugs": ["batik-fashion", "borneo-rainforest", "chinese-new-year", "deepavali", "festive-raya", "kampung-sunset", "kopitiam", "malaysian-heritage", "merdeka", "pasar-malam", "food-menu"]
+  }
+}

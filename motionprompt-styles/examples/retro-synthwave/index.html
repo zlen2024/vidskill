@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080, height=1920" />
+  <title>Retro synthwave</title>
+  <script src="assets/vendor/gsap.min.js"></script>
+  <script src="lib/mp.js"></script>
+
+  <style>
+    /* ---- fonts (vendored, local @font-face is required by lint) ---- */
+    @font-face { font-family: "Orbitron"; font-style: normal; font-weight: 400 900; font-display: block; src: url("assets/fonts/orbitron-latin-wght-normal.woff2") format("woff2"); }
+    /* ---- design tokens: style defaults, brand colours override these ---- */
+    :root {
+      --u: 1px;                         /* 1 design unit: author sizes as calc(N * var(--u)) so 720p drafts match 1080p */
+      --safe-t: calc(220 * var(--u));  /* platform UI safe areas for this aspect ratio */
+      --safe-b: calc(300 * var(--u));
+      --safe-x: calc(64 * var(--u));
+      --bg: #12042b;
+      --ink: #ffffff;
+      --accent: #ff2bd6;
+      --cyan: #2de2ff;
+      --sun-top: #fff36b;
+      --sun-bottom: #ff4f8b;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+    #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
+    .layer { position: absolute; inset: 0; }
+    .safe { padding: var(--safe-t) var(--safe-x) var(--safe-b); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    /* set data-guides="1" on #root while designing to see the safe area, remove before render */
+    #root[data-guides="1"] .safe { outline: calc(3 * var(--u)) dashed rgba(255, 0, 180, .7); outline-offset: calc(-2 * var(--u)); }
+    /* ---- retro-synthwave ---- */
+    #scene canvas { display: block; }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="8" data-width="1080" data-height="1920">
+    <!-- Layer order (back to front): background -> scene -> text -> fx overlay. Keep timed media OUT of wrappers that carry data-start. -->
+    <div id="bg" class="layer"></div>
+    <div id="scene" class="layer"></div>
+    <div id="text" class="layer safe"></div>
+    <div id="fx" class="layer"></div>
+    <audio id="mix" src="assets/audio/mix.wav" data-start="0" data-duration="8" data-track-index="9" data-volume="1"></audio>
+  </div>
+
+  <script type="module">
+    import { D, T, BPM } from "./timing.mjs";
+    import { CONTENT } from "./content.mjs";
+    const { $ } = MP;
+    const W = 1080, H = 1920;
+    const HOR = Math.round(H * 0.6);                         // horizon y (9:16 recipe)
+    const words = (CONTENT.lines[0] || "NEON NIGHTS").toUpperCase().split(/\s+/);
+
+    MP.fontsReady(['900 40px "Orbitron"']).then(() => {
+      const tl = gsap.timeline({ paused: true });
+      const C = { bg: MP.css("--bg"), magenta: MP.css("--accent"), cyan: MP.css("--cyan"), sunTop: MP.css("--sun-top"), sunBot: MP.css("--sun-bottom") };
+      const { ctx } = MP.canvas($("#scene"), W, H);
+      const rnd = MP.rng(4242);
+
+      // ---------- static, seeded assets (built once) ----------
+      const stars = Array.from({ length: 140 }, () => ({ x: rnd() * W, y: rnd() * HOR * 0.85, r: 1 + rnd() * 2.2, n: 1 + Math.floor(rnd() * 4), p: rnd() * 6.283 }));
+      function ridge(side, seed) {                           // low in the middle so the sun stays visible
+        const r = MP.rng(seed), pts = [], N = 12;
+        for (let i = 0; i <= N; i++) {
+          const u = i / N, x = side < 0 ? u * W * 0.5 : W * 0.5 + u * W * 0.5;
+          const edge = side < 0 ? 1 - u : u;                  // 0 at centre, 1 at the frame edge
+          const peak = i % 2 === 0, h = (20 + 190 * MP.smooth((edge - 0.1) / 0.75)) * (peak ? 0.55 + 0.45 * r() : 0.1 + 0.12 * r());   // sharp triangular peaks, low valleys
+          pts.push([x, HOR - Math.max(5, h)]);
+        }
+        return pts;
+      }
+      const ridges = [ridge(-1, 11), ridge(1, 23)];
+      const R = W * 0.3, sunX = W / 2, sunY = HOR - R * 0.96;  // bottom of the disc sits on the horizon, the striped lower half stays visible
+
+      // sun with stripes (offscreen so destination-out only affects the sun)
+      const sun = MP.canvas(null, Math.round(R * 2), Math.round(R * 2)), sctx = sun.ctx;
+      const STRIPE_PITCH = 32;                                 // 8 s * 12 px/s = 96 px = 3 pitches -> periodic in D
+
+      // headline: offscreen, chrome gradient, drawn once per line
+      const lineSize = Math.min(...words.map((w) => MP.fitLine(w, '"Orbitron"', 900, W * 0.84)), 230);
+      const head = MP.canvas(null, W, Math.round(words.length * lineSize * 1.15) + 40), hctx = head.ctx;
+      const HEAD_Y = Math.round(sunY - R - H * 0.03 - head.c.height);   // headline sits above the sun
+      function drawHeadline(mode) {                            // mode: "chrome" | "red" | "cyan"
+        hctx.clearRect(0, 0, head.c.width, head.c.height);
+        hctx.font = `900 ${lineSize}px "Orbitron"`; hctx.textAlign = "center"; hctx.textBaseline = "middle";
+        words.forEach((w, i) => {
+          const cy = 20 + lineSize * 0.575 + i * lineSize * 1.15, top = cy - lineSize * 0.5, bot = cy + lineSize * 0.5;
+          hctx.save(); hctx.transform(1, 0, -0.14, 1, cy * 0.14, 0);      // lean forward like an 80s logo
+          if (mode === "chrome") {
+            const g = hctx.createLinearGradient(0, top, 0, bot);
+            g.addColorStop(0, "#7fdcff"); g.addColorStop(0.42, "#ffffff"); g.addColorStop(0.5, "#2a1550"); g.addColorStop(0.54, "#ff9ad8"); g.addColorStop(1, C.magenta);
+            hctx.shadowColor = "rgba(255,43,214,0.75)"; hctx.shadowBlur = 34; hctx.fillStyle = g; hctx.fillText(w, W / 2, cy);
+            hctx.shadowBlur = 0; hctx.lineWidth = 3; hctx.strokeStyle = "rgba(255,255,255,0.9)"; hctx.strokeText(w, W / 2, cy);
+          } else { hctx.fillStyle = mode === "red" ? "#ff2a3d" : "#19e3ff"; hctx.fillText(w, W / 2, cy); }
+          hctx.restore();
+        });
+        return head.c.cloneNode ? (() => { const c = document.createElement("canvas"); c.width = head.c.width; c.height = head.c.height; c.getContext("2d").drawImage(head.c, 0, 0); return c; })() : null;
+      }
+      const HC = drawHeadline("chrome"), HR = drawHeadline("red"), HB = drawHeadline("cyan");
+      const grain = MP.grainTile(9, 256);
+
+      // ---------- one frame, a pure function of t ----------
+      function draw(t) {
+        // sky
+        const sky = ctx.createLinearGradient(0, 0, 0, HOR);
+        sky.addColorStop(0, "#0a0220"); sky.addColorStop(0.55, "#2b0a52"); sky.addColorStop(1, "#7a1a7a");
+        ctx.fillStyle = sky; ctx.fillRect(0, 0, W, HOR);
+        for (const s of stars) { const a = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin((6.283 * s.n * t) / D + s.p)); ctx.fillStyle = `rgba(255,255,255,${a})`; ctx.fillRect(s.x, s.y, s.r, s.r); }
+
+        // sun: gradient disc, stripes cut from the lower half, sliding down slowly
+        sctx.clearRect(0, 0, R * 2, R * 2);
+        const sg = sctx.createLinearGradient(0, 0, 0, R * 2); sg.addColorStop(0, C.sunTop); sg.addColorStop(0.5, "#ffb14a"); sg.addColorStop(1, C.sunBot);
+        sctx.fillStyle = sg; sctx.beginPath(); sctx.arc(R, R, R, 0, 6.283); sctx.fill();
+        sctx.globalCompositeOperation = "destination-out";
+        const slide = (t * 12) % STRIPE_PITCH;
+        for (let y = R * 1.1 + slide - STRIPE_PITCH * 4; y < R * 2; y += STRIPE_PITCH) { const k = (y - R * 1.1) / (R * 0.9); if (k <= 0) continue; sctx.fillRect(0, y, R * 2, Math.min(STRIPE_PITCH * 0.8, 3 + k * 22)); }
+        sctx.globalCompositeOperation = "source-over";
+        ctx.save(); ctx.shadowColor = "rgba(255,79,139,0.55)"; ctx.shadowBlur = 60; ctx.drawImage(sun.c, sunX - R, sunY - R); ctx.restore();
+
+        // mountains (dark wireframe-look ridges with cyan edge)
+        for (const pts of ridges) {
+          ctx.beginPath(); ctx.moveTo(pts[0][0], HOR); pts.forEach(([x, y]) => ctx.lineTo(x, y)); ctx.lineTo(pts[pts.length - 1][0], HOR); ctx.closePath();
+          ctx.fillStyle = "#14063a"; ctx.fill();
+          ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.lineWidth = 3; ctx.strokeStyle = C.cyan; ctx.shadowColor = C.cyan; ctx.shadowBlur = 14; ctx.stroke(); ctx.shadowBlur = 0;
+        }
+
+        // floor: dark plane, one grid line passes per beat (periodic in D)
+        const fl = ctx.createLinearGradient(0, HOR, 0, H); fl.addColorStop(0, "#3b0a55"); fl.addColorStop(1, "#12042b");
+        ctx.fillStyle = fl; ctx.fillRect(0, HOR, W, H - HOR);
+        ctx.lineWidth = 1.6; ctx.shadowColor = C.magenta; ctx.shadowBlur = 6;
+        const frac = (t * BPM / 60) % 1, sp = 0.6, dNear = 1, dFar = dNear + 80 * sp, Cc = (H - HOR) * dNear;   // one grid line passes per beat
+        for (let k = 0; k < 80; k++) {
+          const d = dNear + (k - frac) * sp, y = HOR + Cc / d, a = Math.pow(1 - (d - dNear) / (dFar - dNear), 1.4);
+          ctx.strokeStyle = `rgba(255,43,214,${0.15 + 0.85 * a})`; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+        }
+        for (let i = -30; i <= 30; i++) { ctx.strokeStyle = "rgba(255,43,214,0.6)"; ctx.beginPath(); ctx.moveTo(W / 2, HOR); ctx.lineTo(W / 2 + i * (W / 10), H); ctx.stroke(); }
+        ctx.shadowBlur = 0;
+        const haze = ctx.createLinearGradient(0, HOR - 20, 0, HOR + 160); haze.addColorStop(0, "rgba(255,79,139,0.55)"); haze.addColorStop(1, "rgba(255,79,139,0)");
+        ctx.fillStyle = haze; ctx.fillRect(0, HOR - 20, W, 180);
+
+        // chrome headline with VHS fringe; tracking band wobbles the rows it crosses
+        const pop = MP.seg(t, T.sting, 0.35, MP.E.outBack), alpha = MP.clamp(pop * 1.4), sc = 0.9 + 0.1 * pop;
+        const band = t >= T.band && t <= T.bandend ? (t - T.band) / (T.bandend - T.band) : -1, by = band < 0 ? -999 : band * (H + 200) - 100, bh = 130;
+        const hh = head.c.height, ox = 0;
+        ctx.save(); ctx.globalAlpha = alpha; ctx.translate(W / 2, HEAD_Y + hh / 2); ctx.scale(sc, sc); ctx.translate(-W / 2, -(HEAD_Y + hh / 2));
+        const STRIP = 6, wob = band < 0 ? 0 : 1;
+        for (let y = 0; y < hh; y += STRIP) {
+          const sy = HEAD_Y + y, inBand = wob && sy + STRIP > by && sy < by + bh, dx = inBand ? MP.noise1(y * 0.2 + t * 30, 5) * 26 : 0;
+          ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = alpha * 0.55;
+          ctx.drawImage(HR, 0, y, W, STRIP, ox - 4 + dx, sy, W, STRIP); ctx.drawImage(HB, 0, y, W, STRIP, ox + 4 + dx, sy, W, STRIP);
+          ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = alpha; ctx.drawImage(HC, 0, y, W, STRIP, ox + dx, sy, W, STRIP);
+        }
+        ctx.restore();
+        if (band >= 0) { ctx.fillStyle = "rgba(255,255,255,0.06)"; ctx.fillRect(0, by, W, bh); for (let y = 0; y < bh; y += 5) { ctx.fillStyle = `rgba(255,255,255,${0.05 * MP.hash(y + Math.floor(t * 24), 3)})`; ctx.fillRect(0, by + y, W, 2); } }
+
+        // CRT scanlines, film grain, vignette
+        ctx.fillStyle = "rgba(0,0,0,0.2)"; for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+        MP.drawGrain(ctx, grain, t, W, H, { fps: 24, alpha: 0.05 });
+        MP.vignette(ctx, W, H, 0.45);
+      }
+
+      MP.onSeek(draw, { tl, duration: D });
+      window.__timelines["main"] = tl;
+    });
+  </script>
+</body>
+</html>

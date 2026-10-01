@@ -1,0 +1,18 @@
+{
+  "duration": 8,
+  "seed": 7,
+  "sound": "music",
+  "music": { "preset": "pop-modern", "bpm": 130, "key": "D", "duck": 0.5 },
+  "cues": [
+    { "t": 0.30, "kind": "kick", "vol": 0.9 },
+    { "t": 0.60, "kind": "whoosh", "dir": "up", "dur": 0.5, "vol": 0.6 },
+    { "t": 1.10, "kind": "pop", "freq": 523, "vol": 0.8 },
+    { "t": 1.40, "kind": "pop", "freq": 659, "vol": 0.8 },
+    { "t": 1.70, "kind": "pop", "freq": 784, "vol": 0.8, "pan": 0.3 },
+    { "t": 2.20, "kind": "typing", "n": 14, "dt": 0.07, "spaceEvery": 5, "vol": 0.5 },
+    { "t": 3.60, "kind": "ticks", "n": 18, "span": 1.2, "curve": "decel", "vol": 0.5, "final": { "kind": "ding", "vol": 0.9 } },
+    { "t": 5.30, "kind": "run", "inst": "marimba", "from": "C5", "n": 7, "dt": 0.09, "vol": 0.7 },
+    { "t": 6.20, "kind": "riser", "dur": 1.4, "vol": 0.5, "tone": 0.3 },
+    { "t": 7.60, "kind": "impact", "vol": 0.9, "verb": 0.4 }
+  ]
+}

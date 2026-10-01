@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width={{W}}, height={{H}}" />
+  <title>{{TITLE}}</title>
+  <script src="assets/vendor/gsap.min.js"></script>
+  <script src="lib/mp.js"></script>
+{{HEAD_EXTRA}}
+  <style>
+    /* ---- fonts (vendored, local @font-face is required by lint) ---- */
+{{FONT_FACE}}
+    /* ---- design tokens: style defaults, brand colours override these ---- */
+    :root {
+      --u: {{U}}px;                         /* 1 design unit: author sizes as calc(N * var(--u)) so 720p drafts match 1080p */
+      --safe-t: calc({{SAFE_T}} * var(--u));  /* platform UI safe areas for this aspect ratio */
+      --safe-b: calc({{SAFE_B}} * var(--u));
+      --safe-x: calc({{SAFE_X}} * var(--u));
+{{TOKENS}}
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: {{W}}px; height: {{H}}px; overflow: hidden; background: var(--bg); }
+    #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
+    .layer { position: absolute; inset: 0; }
+    .safe { padding: var(--safe-t) var(--safe-x) var(--safe-b); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    /* set data-guides="1" on #root while designing to see the safe area, remove before render */
+    #root[data-guides="1"] .safe { outline: calc(3 * var(--u)) dashed rgba(255, 0, 180, .7); outline-offset: calc(-2 * var(--u)); }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="{{DURATION}}" data-width="{{W}}" data-height="{{H}}">
+    <!-- Layer order (back to front): background -> scene -> text -> fx overlay. Keep timed media OUT of wrappers that carry data-start. -->
+    <div id="bg" class="layer"></div>
+    <div id="scene" class="layer"></div>
+    <div id="text" class="layer safe"></div>
+    <div id="fx" class="layer"></div>
+{{AUDIO}}
+  </div>
+
+  <script type="module">
+    import { D, T, BPM, beat } from "./timing.mjs";
+    import { CONTENT } from "./content.mjs";
+    const { $, E, seg } = MP, U = {{U}};        // U: px per design unit (use in canvas / JS math; CSS uses var(--u))
+
+    // The timeline is built only after every font face is loaded; it is registered LAST (see hyperframes determinism rules).
+    MP.fontsReady({{FONT_SPECS}}).then(() => {
+      const tl = gsap.timeline({ paused: true });
+
+      /* ================= BUILD HERE (style: {{SLUG}}) =================
+         1. Static end state first: create the DOM/canvas layers inside #bg / #scene / #text / #fx.
+         2. Animate from those states with tl.fromTo(...) at times taken from T (timing.mjs), never hard-coded seconds.
+         3. Canvas / WebGL / Three: MP.onSeek((t) => draw(t)) : draw is a pure function of t (seeded rng, no state carried between frames).
+         4. Loop / ending rules are in the style file. Text comes from CONTENT (content.mjs). */
+      const card = MP.el("div", "", $("#text"), { font: "700 calc(64 * var(--u)) system-ui, sans-serif", color: "var(--ink)" });
+      card.textContent = CONTENT.lines[0] || "{{TITLE}}";
+      tl.fromTo(card, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, T.start + 0.2);
+
+      window.__timelines["main"] = tl;
+    });
+  </script>
+</body>
+</html>

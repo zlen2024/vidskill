@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080, height=1920" />
+  <title>Transparent FX</title>
+  <script src="assets/vendor/gsap.min.js"></script>
+  <script src="lib/mp.js"></script>
+  <script src="fx.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 1080px; height: 1920px; overflow: hidden; background: transparent; }
+    #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: transparent; }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="2.4" data-width="1080" data-height="1920">
+    <div id="scene" style="position:absolute;inset:0"></div>
+  </div>
+  <script>
+    (() => {
+      const W = 1080, H = 1920, F = window.FX, D = F.dur, TAU = Math.PI * 2, { clamp } = MP;
+      document.getElementById("root").setAttribute("data-duration", String(D));
+      const tl = gsap.timeline({ paused: true });
+      const cv = document.createElement("canvas"); cv.width = W; cv.height = H; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
+      cv.setAttribute("data-layout-allow-overflow", ""); document.getElementById("scene").appendChild(cv);
+      const ctx = cv.getContext("2d"), rnd = MP.rng(F.seed);
+      const COLS = ["#ff3d81", "#ff8a1f", "#ffc933", "#10c9a0", "#0aa5e8", "#7c4dff", "#ffffff"];
+      const star = (r) => { ctx.beginPath(); for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4, rad = i % 2 ? r * 0.22 : r; ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad); } ctx.closePath(); ctx.fill(); };
+      let parts;
+      if (F.name === "burst") {
+        parts = Array.from({ length: 150 }, () => { const a = rnd() * TAU, v = 260 + rnd() * 980; return { x0: W / 2, y0: 880, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 220, g: 900, life: 1.3 + rnd() * 1.0, s: 10 + rnd() * 26, kind: rnd() < 0.45 ? "rect" : rnd() < 0.6 ? "star" : "dot", c: COLS[Math.floor(rnd() * COLS.length)], rot: rnd() * TAU, w: (rnd() - 0.5) * 14, drag: 1.6 }; });
+      } else if (F.name === "rain") {
+        parts = Array.from({ length: 70 }, () => ({ x0: rnd() * W, y0: -80 - rnd() * 500, vx: (rnd() - 0.5) * 80, vy: 340 + rnd() * 520, g: 0, life: 2.4, s: 10 + rnd() * 22, kind: "star", c: COLS[Math.floor(rnd() * COLS.length)], rot: 0, w: 0, drag: 0, delay: rnd() * 0.9 }));
+      } else {   // "sweep": a diagonal glossy light streak
+        parts = [];
+      }
+      function draw(t) {
+        ctx.clearRect(0, 0, W, H);
+        if (F.name === "sweep") {
+          const u = clamp(t / D), x = -500 + u * (W + 1000), g = ctx.createLinearGradient(x - 220, 0, x + 220, 0);
+          g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,0.55)"); g.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(-0.4); ctx.translate(-W / 2, -H / 2); ctx.fillStyle = g; ctx.fillRect(x - 220, -600, 440, H + 1200); ctx.restore();
+          return;
+        }
+        for (const p of parts) {
+          const tt = t - (p.delay || 0); if (tt < 0 || tt > p.life) continue;
+          const k = p.drag ? (1 - Math.exp(-p.drag * tt)) / p.drag : tt;
+          const x = p.x0 + p.vx * k, y = p.y0 + p.vy * k + 0.5 * p.g * tt * tt;
+          const a = clamp(1 - Math.pow(tt / p.life, 2.2)) * clamp(tt / 0.05);
+          ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot + p.w * tt); ctx.globalAlpha = a; ctx.fillStyle = p.c;
+          if (p.kind === "rect") ctx.fillRect(-p.s / 2, -p.s * 0.2, p.s, p.s * 0.4); else if (p.kind === "star") star(p.s); else { ctx.beginPath(); ctx.arc(0, 0, p.s * 0.35, 0, TAU); ctx.fill(); }
+          ctx.restore();
+        }
+      }
+      MP.onSeek(draw, { tl, duration: D });
+      window.__timelines["main"] = tl;
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080, height=1920" />
+  <title>3D logo spin</title>
+  <script src="assets/vendor/gsap.min.js"></script>
+  <script src="lib/mp.js"></script>
+  <script type="importmap">{"imports":{"three":"./assets/vendor/three.module.js"}}</script>
+  <style>
+    /* ---- fonts (vendored, local @font-face is required by lint) ---- */
+    @font-face { font-family: "Montserrat"; font-style: normal; font-weight: 100 900; font-display: block; src: url("assets/fonts/montserrat-latin-wght-normal.woff2") format("woff2"); }
+    /* ---- design tokens: style defaults, brand colours override these ---- */
+    :root {
+      --u: 1px;                         /* 1 design unit: author sizes as calc(N * var(--u)) so 720p drafts match 1080p */
+      --safe-t: calc(220 * var(--u));  /* platform UI safe areas for this aspect ratio */
+      --safe-b: calc(300 * var(--u));
+      --safe-x: calc(64 * var(--u));
+      --bg: #120e2b;
+      --ink: #ffffff;
+      --accent: #ffb547;
+      --rim: #6bd5ff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+    #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
+    .layer { position: absolute; inset: 0; }
+    .safe { padding: var(--safe-t) var(--safe-x) var(--safe-b); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    /* set data-guides="1" on #root while designing to see the safe area, remove before render */
+    #root[data-guides="1"] .safe { outline: calc(3 * var(--u)) dashed rgba(255, 0, 180, .7); outline-offset: calc(-2 * var(--u)); }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="1080" data-height="1920">
+    <!-- Layer order (back to front): background -> scene -> text -> fx overlay. Keep timed media OUT of wrappers that carry data-start. -->
+    <div id="bg" class="layer"></div>
+    <div id="scene" class="layer"></div>
+    <div id="text" class="layer safe"></div>
+    <div id="fx" class="layer"></div>
+    <audio id="mix" src="assets/audio/mix.wav" data-start="0" data-duration="6" data-track-index="9" data-volume="1"></audio>
+  </div>
+
+  <script type="module">
+    import { D, T, BPM, beat } from "./timing.mjs";
+    import { CONTENT } from "./content.mjs";
+    import * as THREE from "three";
+    const { $, E, seg } = MP, U = 1;        // U: px per design unit (use in canvas / JS math; CSS uses var(--u))
+
+    // The timeline is built only after every font face is loaded; it is registered LAST (see hyperframes determinism rules).
+    MP.fontsReady(["400 40px \"Montserrat\"","700 40px \"Montserrat\""]).then(() => {
+      const tl = gsap.timeline({ paused: true });
+
+      /* ================= BUILD HERE (style: logo-spin-3d) =================
+         1. Static end state first: create the DOM/canvas layers inside #bg / #scene / #text / #fx.
+         2. Animate from those states with tl.fromTo(...) at times taken from T (timing.mjs), never hard-coded seconds.
+         3. Canvas / WebGL / Three: MP.onSeek((t) => draw(t)) : draw is a pure function of t (seeded rng, no state carried between frames).
+         4. Loop / ending rules are in the style file. Text comes from CONTENT (content.mjs). */
+      const card = MP.el("div", "", $("#text"), { position: "absolute", left: "0", right: "0", top: "68%", font: "700 calc(70 * var(--u)) Montserrat, sans-serif", letterSpacing: "0.3em", paddingLeft: "0.3em", textAlign: "center", color: "var(--ink)" });
+      card.textContent = (CONTENT.lines[0] || "AURORA").toUpperCase();
+      tl.fromTo(card, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, T.hit + 0.3);
+      const glow = MP.el("div", "", $("#bg"), { position: "absolute", inset: "0", background: "radial-gradient(60% 40% at 50% 42%, #3a2a7a 0%, rgba(18,14,43,0) 70%)" });
+
+      // ---------- Three scene (pure function of t) ----------
+      const W = 1080, H = 1920;
+      const cv = document.createElement("canvas"); cv.width = W; cv.height = H; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
+      cv.setAttribute("data-layout-allow-overflow", ""); $("#scene").appendChild(cv);
+      const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, preserveDrawingBuffer: true });
+      renderer.setPixelRatio(1); renderer.setSize(W, H, false); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+      const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(30, W / H, 0.1, 100); camera.position.set(0, 0.55, 9.5); camera.lookAt(0, 0.55, 0); camera.setViewOffset(W, H, 0, Math.round(H * 0.06), W, H);
+
+      // studio environment: dark gradient with soft white boxes -> PMREM
+      const ec = document.createElement("canvas"); ec.width = 1024; ec.height = 512; const ex = ec.getContext("2d");
+      const eg = ex.createLinearGradient(0, 0, 0, 512); eg.addColorStop(0, "#39306a"); eg.addColorStop(0.5, "#15112e"); eg.addColorStop(1, "#08061a"); ex.fillStyle = eg; ex.fillRect(0, 0, 1024, 512);
+      ex.fillStyle = "#ffffff"; ex.fillRect(120, 90, 200, 120); ex.fillRect(560, 60, 260, 90); ex.fillStyle = "#6bd5ff"; ex.fillRect(820, 180, 90, 200); ex.fillStyle = "#ffb547"; ex.fillRect(380, 300, 160, 60);
+      const envTex = new THREE.CanvasTexture(ec); envTex.mapping = THREE.EquirectangularReflectionMapping; envTex.colorSpace = THREE.SRGBColorSpace;
+      const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromEquirectangular(envTex).texture; scene.environmentIntensity = 0.9;
+
+      const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(2, 4, 8); scene.add(key);
+      const rimL = new THREE.DirectionalLight(new THREE.Color(MP.css("--rim")), 3.2); rimL.position.set(-4, 2, -6); scene.add(rimL);
+      scene.add(new THREE.HemisphereLight(0x8a7cff, 0x120e2b, 0.5));
+
+      // badge: rounded square + pressed letter "A"
+      const rr = (w, h, r) => { const s = new THREE.Shape(), x = -w / 2, y = -h / 2; s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h); s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s; };
+      const gold = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(MP.css("--accent")), metalness: 0.6, roughness: 0.28, clearcoat: 0.6, clearcoatRoughness: 0.2 });
+      const dark = new THREE.MeshPhysicalMaterial({ color: 0x1d1640, metalness: 0.5, roughness: 0.35, clearcoat: 0.5 });
+      const base = new THREE.Mesh(new THREE.ExtrudeGeometry(rr(3.2, 3.2, 0.6), { depth: 0.5, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.1, bevelSegments: 6, curveSegments: 16 }), gold);
+      const A = new THREE.Shape(); [[-1, -1], [-0.55, -1], [-0.4, -0.55], [0.4, -0.55], [0.55, -1], [1, -1], [0.28, 1.1], [-0.28, 1.1]].forEach(([x, y], i) => (i ? A.lineTo(x * 0.85, y * 0.85) : A.moveTo(x * 0.85, y * 0.85)));
+      const hole = new THREE.Path(); [[-0.22, -0.2], [0.22, -0.2], [0, 0.5]].forEach(([x, y], i) => (i ? hole.lineTo(x * 0.85, y * 0.85 - 0.02) : hole.moveTo(x * 0.85, y * 0.85 - 0.02))); A.holes.push(hole);
+      const letter = new THREE.Mesh(new THREE.ExtrudeGeometry(A, { depth: 0.18, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 3 }), dark);
+      base.position.z = -0.25; letter.position.z = 0.5 + 0.12 - 0.25 + 0.02;
+      const badge = new THREE.Group(); badge.add(base, letter); scene.add(badge);
+
+      const BADGE = 0.5, spinDur = 2.2,       // 3.2-unit badge * 0.5 = 55% of the 9:16 frame width
+         SPIN = (t, t0) => MP.E.inOutCubic(MP.clamp((t - t0) / spinDur));
+      function draw(t) {
+        const appear = MP.seg(t, T.hit, 0.6, MP.E.outBack);
+        badge.scale.setScalar(BADGE * (0.6 + 0.4 * appear));
+        badge.rotation.y = Math.PI * 2 * (SPIN(t, T.spin1) + SPIN(t, T.spin2));
+        const fl = MP.smooth(MP.clamp((t - T.settle) / 0.4)) * (1 - MP.smooth(MP.clamp((t - (T.spin2 - 0.1)) / 0.3)));
+        badge.position.y = 0.55 + BADGE * 0 + fl * 0.06 * Math.sin(((t - T.settle) / (T.spin2 - T.settle)) * Math.PI * 2);
+        badge.rotation.x = fl * 0.12 * Math.sin(((t - T.settle) / (T.spin2 - T.settle)) * Math.PI * 4);
+        renderer.render(scene, camera);
+      }
+      MP.onSeek(draw, { tl, duration: D });
+
+      window.__timelines["main"] = tl;
+    });
+  </script>
+</body>
+</html>

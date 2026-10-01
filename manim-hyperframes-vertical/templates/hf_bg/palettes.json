@@ -1,0 +1,8 @@
+{
+ "sunrise": {"top": "#ffe3ec", "bottom": "#ffc8a8", "blobs": ["#ff3d81", "#ff8a1f", "#ffc933", "#7c4dff"], "seed": 11},
+ "aqua":    {"top": "#d9f7ff", "bottom": "#bfe3ff", "blobs": ["#0aa5e8", "#10c9a0", "#3d6bff", "#ffc933"], "seed": 23},
+ "lilac":   {"top": "#ece3ff", "bottom": "#d2c4ff", "blobs": ["#7c4dff", "#ff3d81", "#3d6bff", "#10c9a0"], "seed": 37},
+ "mint":    {"top": "#dcfff1", "bottom": "#c0f3e4", "blobs": ["#10c9a0", "#0aa5e8", "#ffc933", "#ff8a1f"], "seed": 41},
+ "peach":   {"top": "#fff1d6", "bottom": "#ffd6c2", "blobs": ["#ff8a1f", "#ff3d81", "#ffc933", "#7c4dff"], "seed": 53},
+ "candy":   {"top": "#f6e6ff", "bottom": "#ffd3ec", "blobs": ["#ff3d81", "#7c4dff", "#0aa5e8", "#ffc933"], "seed": 67}
+}

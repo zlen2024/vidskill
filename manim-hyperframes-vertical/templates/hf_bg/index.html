@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080, height=1920" />
+  <title>Loop background</title>
+  <script src="assets/vendor/gsap.min.js"></script>
+  <script src="lib/mp.js"></script>
+  <script src="palette.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 1080px; height: 1920px; overflow: hidden; background: #fff; }
+    #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="12" data-width="1080" data-height="1920">
+    <div id="scene" style="position:absolute;inset:0"></div>
+  </div>
+  <script>
+    (() => {
+      const W = 1080, H = 1920, D = 12, TAU = Math.PI * 2, P = window.PALETTE, { clamp } = MP;
+      const tl = gsap.timeline({ paused: true });
+      const cv = document.createElement("canvas"); cv.width = W; cv.height = H; cv.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
+      cv.setAttribute("data-layout-allow-overflow", ""); document.getElementById("scene").appendChild(cv);
+      const ctx = cv.getContext("2d"), rnd = MP.rng(P.seed);
+      // everything below is periodic in D (whole cycles), so the clip loops with no seam
+      const blobs = P.blobs.map((c, i) => ({ c, x: rnd() * W, y: rnd() * H, r: 520 + rnd() * 380, fx: 1 + (i % 2), fy: 1 + ((i + 1) % 2), px: rnd() * TAU, py: rnd() * TAU, ax: 260 + rnd() * 200, ay: 320 + rnd() * 260 }));
+      const bokeh = Array.from({ length: 70 }, () => ({ x: rnd() * W, y: rnd() * H, r: 10 + rnd() * 46, a: 0.1 + rnd() * 0.28, v: 1 + Math.floor(rnd() * 3), sx: 1 + Math.floor(rnd() * 2), p: rnd() * TAU, c: P.blobs[Math.floor(rnd() * P.blobs.length)] }));
+      const sparks = Array.from({ length: 46 }, () => ({ x: rnd() * W, y: rnd() * H, s: 5 + rnd() * 9, n: 1 + Math.floor(rnd() * 4), p: rnd() * TAU }));
+      const hex = (h, a) => { const c = MP.hexToRgb(h); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
+      function draw(t) {
+        const u = (t % D) / D, ph = u * TAU;
+        const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, P.top); g.addColorStop(1, P.bottom); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        ctx.globalCompositeOperation = "source-over";
+        for (const b of blobs) {
+          const x = b.x + Math.sin(ph * b.fx + b.px) * b.ax, y = b.y + Math.cos(ph * b.fy + b.py) * b.ay;
+          const rg = ctx.createRadialGradient(x, y, 0, x, y, b.r); rg.addColorStop(0, hex(b.c, 0.42)); rg.addColorStop(0.55, hex(b.c, 0.16)); rg.addColorStop(1, hex(b.c, 0));
+          ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+        }
+        // faint dot lattice drifting diagonally (one cell per loop)
+        ctx.fillStyle = "rgba(255,255,255,0.35)"; const cell = 72, off = u * cell;
+        for (let y = -cell; y < H + cell; y += cell) for (let x = -cell; x < W + cell; x += cell) { ctx.beginPath(); ctx.arc(x + off, y + off, 2.2, 0, TAU); ctx.fill(); }
+        // bokeh rising and wrapping
+        for (const b of bokeh) {
+          const y = ((b.y - u * H * b.v) % H + H) % H, x = b.x + Math.sin(ph * b.sx + b.p) * 40;
+          const rg = ctx.createRadialGradient(x, y, 0, x, y, b.r); rg.addColorStop(0, hex(b.c, b.a)); rg.addColorStop(0.7, hex(b.c, b.a * 0.7)); rg.addColorStop(1, hex(b.c, 0));
+          ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(x, y, b.r, 0, TAU); ctx.fill();
+        }
+        // twinkling four-point sparkles
+        for (const s of sparks) {
+          const a = 0.5 + 0.5 * Math.sin(ph * s.n + s.p); if (a < 0.35) continue;
+          ctx.save(); ctx.translate(s.x, s.y); ctx.globalAlpha = a * 0.9; ctx.fillStyle = "#fff"; ctx.beginPath();
+          const R = s.s * (0.6 + a), r = R * 0.22; for (let i = 0; i < 8; i++) { const ang = (i * Math.PI) / 4, rad = i % 2 ? r : R; ctx.lineTo(Math.cos(ang) * rad, Math.sin(ang) * rad); } ctx.closePath(); ctx.fill(); ctx.restore();
+        }
+        // diagonal light sweep, once per loop
+        const sx = -400 + u * (W + 800); const lg = ctx.createLinearGradient(sx - 160, 0, sx + 160, 0);
+        lg.addColorStop(0, "rgba(255,255,255,0)"); lg.addColorStop(0.5, "rgba(255,255,255,0.18)"); lg.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(-0.35); ctx.translate(-W / 2, -H / 2); ctx.fillStyle = lg; ctx.fillRect(sx - 160, -400, 320, H + 800); ctx.restore();
+        MP.vignette(ctx, W, H, 0.10);
+      }
+      MP.onSeek(draw, { tl, duration: D });
+      window.__timelines["main"] = tl;
+    })();
+  </script>
+</body>
+</html>

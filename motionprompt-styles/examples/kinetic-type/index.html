@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080, height=1920" />
+  <title>Kinetic typography</title>
+  <script src="assets/vendor/gsap.min.js"></script>
+  <script src="lib/mp.js"></script>
+
+  <style>
+    /* ---- fonts (vendored, local @font-face is required by lint) ---- */
+    @font-face { font-family: "Anton"; font-style: normal; font-weight: 400; font-display: block; src: url("assets/fonts/anton-latin-400-normal.woff2") format("woff2"); }
+    /* ---- design tokens: style defaults, brand colours override these ---- */
+    :root {
+      --u: 1px;                         /* 1 design unit: author sizes as calc(N * var(--u)) so 720p drafts match 1080p */
+      --safe-t: calc(220 * var(--u));  /* platform UI safe areas for this aspect ratio */
+      --safe-b: calc(300 * var(--u));
+      --safe-x: calc(64 * var(--u));
+      --bg: #10131f;
+      --ink: #f6f3ea;
+      --accent: #ff5a4e;
+      --accent2: #ffd23f;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+    #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
+    .layer { position: absolute; inset: 0; }
+    .safe { padding: var(--safe-t) var(--safe-x) var(--safe-b); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    /* set data-guides="1" on #root while designing to see the safe area, remove before render */
+    #root[data-guides="1"] .safe { outline: calc(3 * var(--u)) dashed rgba(255, 0, 180, .7); outline-offset: calc(-2 * var(--u)); }
+    /* ---- kinetic-type ---- */
+    .word { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; }
+    .t { display: block; white-space: nowrap; font-family: "Anton", sans-serif; text-transform: uppercase; line-height: 1; letter-spacing: -0.01em; }
+    .t span { display: inline-block; }
+    .final { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; font-family: "Anton", sans-serif; text-transform: uppercase; line-height: 0.92; white-space: nowrap; }
+    .ln { display: block; }
+    .wipe { position: absolute; inset: 0; background: var(--accent); transform: scaleY(0); transform-origin: 50% 100%; }
+    .wl { display: block; }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="8" data-width="1080" data-height="1920">
+    <!-- Layer order (back to front): background -> scene -> text -> fx overlay. Keep timed media OUT of wrappers that carry data-start. -->
+    <div id="bg" class="layer"></div>
+    <div id="scene" class="layer"></div>
+    <div id="text" class="layer safe"></div>
+    <div id="fx" class="layer"></div>
+    <audio id="mix" src="assets/audio/mix.wav" data-start="0" data-duration="8" data-track-index="9" data-volume="1"></audio>
+  </div>
+
+  <script type="module">
+    import { D, T, BPM } from "./timing.mjs";
+    import { CONTENT } from "./content.mjs";
+    const { $ } = MP;
+    const W = 1080, H = 1920;
+
+    MP.fontsReady(["400 40px \"Anton\""]).then(() => {
+      const tl = gsap.timeline({ paused: true });
+      const root = $("#root"), stage = $("#text"), fx = $("#fx");
+      const C = { bg: MP.css("--bg"), ink: MP.css("--ink"), accent: MP.css("--accent"), accent2: MP.css("--accent2") };
+      const looks = [{ bg: C.bg, fg: C.ink }, { bg: C.accent, fg: C.bg }, { bg: C.accent2, fg: C.bg }];
+      const phrases = (CONTENT.lines.length ? CONTENT.lines : ["Make it move"]).map((s) => s.toUpperCase());
+      const keyLine = (CONTENT.key || phrases[phrases.length - 1]).toUpperCase();
+      const N = phrases.length, beat = 60 / BPM;
+      const phraseAt = (i) => T["phrase" + (i + 1)] ?? i * 2 * beat;          // timing.mjs is the single source of truth
+      const slot = N > 1 ? phraseAt(1) - phraseAt(0) : 2 * beat;
+      const fit = (txt, w, cap) => Math.min(MP.fitLine(txt, '"Anton"', 400, w), cap);
+      const longestOf = (arr) => arr.reduce((a, b) => (b.length > a.length ? b : a), "");
+
+      // ---- words: one absolutely centred slot per phrase; the child .t is what GSAP moves ----
+      const words = phrases.map((txt) => {
+        const w = MP.el("div", "word", stage), t = MP.el("div", "t", w), ws = txt.split(/\s+/), k = ws.length;
+        const line = fit(txt, W * 0.86, H * 0.34);
+        const stack = k > 1 ? Math.min(fit(longestOf(ws), W * 0.86, 9999), (H * 0.8) / (k * 0.9)) : 0;
+        let letters = [];
+        if (stack >= 1.3 * line) {                                               // tall frame: one word per line, much bigger type
+          t.style.fontSize = stack + "px"; t.style.lineHeight = "0.9";
+          ws.forEach((x) => { const wl = MP.el("div", "wl", t); wl.textContent = x; letters.push(...MP.splitText(wl)); });
+        } else { t.style.fontSize = line + "px"; t.textContent = txt; letters = MP.splitText(t); }
+        return { w, t, letters };
+      });
+      const wipe = MP.el("div", "wipe", fx);
+
+      // ---- key line: one word per line, huge, colours cycling ----
+      const fin = MP.el("div", "final", stage), kw = keyLine.split(/\s+/);
+      const finSize = Math.min(fit(longestOf(kw), W * 0.84, 9999), (H * 0.72) / (kw.length * 0.92));
+      const finColors = [C.ink, C.accent, C.accent2];
+      const lines = kw.map((txt, i) => { const l = MP.el("div", "ln", fin); l.textContent = txt; l.style.fontSize = finSize + "px"; l.style.color = finColors[i % 3]; return l; });
+
+      // ---- phrase entrances: punch / spin / drop, hard-cut backgrounds ----
+      tl.set(root, { backgroundColor: looks[0].bg, color: looks[0].fg }, 0);
+      words.forEach(({ w, t, letters }, i) => {
+        const at = phraseAt(i), look = looks[i % 3], kind = i % 3, stag = Math.min(0.06, (slot - 0.45) / Math.max(1, letters.length));
+        if (i > 0) tl.set(words[i - 1].w, { opacity: 0 }, at);
+        tl.set(root, { backgroundColor: look.bg, color: look.fg }, at).set(w, { opacity: 1 }, at);
+        if (kind === 0) tl.fromTo(t, { scale: 2.6, rotation: -12 }, { scale: 1, rotation: -3, duration: 0.35, ease: "expo.out" }, at);
+        else if (kind === 1) tl.fromTo(letters, { scale: 0, rotation: 25 }, { scale: 1, rotation: 0, duration: 0.4, stagger: stag, ease: "back.out(2.5)" }, at);
+        else tl.fromTo(letters, { yPercent: -160, rotation: (j) => (j % 2 ? 14 : -14) }, { yPercent: 0, rotation: 0, duration: 0.45, stagger: stag * 0.85, ease: "back.out(1.6)" }, at);
+      });
+
+      // ---- key line, hold, colour wipe ----
+      tl.set(words[N - 1].w, { opacity: 0 }, T.final).set(root, { backgroundColor: looks[0].bg, color: looks[0].fg }, T.final).set(fin, { opacity: 1 }, T.final);
+      tl.fromTo(lines, { xPercent: (i) => (i % 2 ? 140 : -140), opacity: 0 }, { xPercent: 0, opacity: 1, duration: 0.5, stagger: beat / 2, ease: "expo.out" }, T.final);
+      tl.to(wipe, { scaleY: 1, duration: 0.35, ease: "power3.in" }, T.wipe)
+        .set(fin, { opacity: 0 }, T.wipe + 0.35).set(root, { backgroundColor: C.bg }, T.wipe + 0.35).set(wipe, { transformOrigin: "50% 0%" }, T.wipe + 0.35)
+        .to(wipe, { scaleY: 0, duration: 0.35, ease: "power3.out" }, T.wipe + 0.35);
+
+      window.__timelines["main"] = tl;
+    });
+  </script>
+</body>
+</html>
