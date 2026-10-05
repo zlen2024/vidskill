@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080, height=1920" />
+  <title>Pixel art</title>
+  <script src="assets/vendor/gsap.min.js"></script>
+  <script src="lib/mp.js"></script>
+
+  <style>
+    /* ---- fonts (vendored, local @font-face is required by lint) ---- */
+    @font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: block; src: url("assets/fonts/press-start-2p-latin-400-normal.woff2") format("woff2"); }
+    /* ---- design tokens: style defaults, brand colours override these ---- */
+    :root {
+      --u: 1px;                         /* 1 design unit: author sizes as calc(N * var(--u)) so 720p drafts match 1080p */
+      --safe-t: calc(220 * var(--u));  /* platform UI safe areas for this aspect ratio */
+      --safe-b: calc(300 * var(--u));
+      --safe-x: calc(64 * var(--u));
+      --bg: #41a6f6;
+      --ink: #fff4e0;
+      --navy: #1a1c2c;
+      --accent: #ffcd75;
+      --orange: #ef7d57;
+      --grass: #38b764;
+      --cyan: #73eff7;
+      --pink: #f58fb6;
+      --mint: #3fb8a8;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+    #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
+    .layer { position: absolute; inset: 0; }
+    .safe { padding: var(--safe-t) var(--safe-x) var(--safe-b); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    /* set data-guides="1" on #root while designing to see the safe area, remove before render */
+    #root[data-guides="1"] .safe { outline: calc(3 * var(--u)) dashed rgba(255, 0, 180, .7); outline-offset: calc(-2 * var(--u)); }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="15" data-width="1080" data-height="1920">
+    <!-- Layer order (back to front): background -> scene -> text -> fx overlay. Keep timed media OUT of wrappers that carry data-start. -->
+    <div id="bg" class="layer"></div>
+    <div id="scene" class="layer"></div>
+    <div id="text" class="layer safe"></div>
+    <div id="fx" class="layer"></div>
+    <audio id="mix" src="assets/audio/mix.wav" data-start="0" data-duration="15" data-track-index="9" data-volume="1"></audio>
+  </div>
+
+  <script type="module">
+    import { D, T } from "./timing.mjs";
+    import { CONTENT } from "./content.mjs";
+    const { $ } = MP;
+    const W = 1080, H = 1920;
+
+    // ---------- content (CONTENT.game, else derived from lines/key) ----------
+    const L0 = CONTENT.lines || [], G0 = CONTENT.game || {};
+    const GAME = {
+      name: (G0.name || L0[0] || "PLAYER").toUpperCase(),
+      role: (G0.role || L0[1] || "").toUpperCase(),
+      stats: G0.stats || [["POWER", 9], ["SPEED", 7], ["HEART", 10]],
+      features: (G0.features || L0.slice(2, 5)).slice(0, 3).map((s) => s.toUpperCase()),
+      proof: G0.proof || null,
+      cta: (G0.cta || CONTENT.key || "PLAY NOW").toUpperCase(),
+      handle: G0.handle || "",                                   // kept exactly as written
+    };
+
+    MP.fontsReady(['400 8px "Press Start 2P"', '400 16px "Press Start 2P"']).then(() => {
+      const tl = gsap.timeline({ paused: true });
+      const css = (n) => MP.css(n);
+      const P = { sky: css("--bg"), cream: css("--ink"), navy: css("--navy"), yellow: css("--accent"), orange: css("--orange"), grass: css("--grass"),
+        cyan: css("--cyan"), pink: css("--pink"), mint: css("--mint"), white: "#ffffff", skin: "#f4b98c", sponge: "#e8b06a", brown: "#8b5a3c", jam: "#c73e5a", grey: "#5d6b84", black: "#000000" };
+
+      // ---------- pixel pipeline: draw at low resolution, scale up with square pixels ----------
+      const S = Math.max(1, Math.round(Math.min(W, H) / 180)), LW = Math.round(W / S), LH = Math.round(H / S);
+      const low = MP.canvas(null, LW, LH), g = low.ctx;
+      const outC = MP.canvas($("#scene"), W, H), out = outC.ctx;
+      outC.c.setAttribute("data-layout-allow-overflow", "");    // the game world is intentionally full-bleed
+      out.imageSmoothingEnabled = false;
+      const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); };
+      const SAFE_T = Math.ceil((W < H ? 220 : 64) / S), SAFE_B = Math.ceil((W < H ? 300 : 72) / S);
+
+      // sprites: string rows, one char per pixel, mapped through a palette
+      function spr(rows, pal, x, y, k = 1, flip = false) {
+        x = Math.round(x); y = Math.round(y);
+        for (let j = 0; j < rows.length; j++) { const row = rows[j];
+          for (let i = 0; i < row.length; i++) { const c = pal[row[i]]; if (!c) continue;
+            g.fillStyle = c; g.fillRect(x + (flip ? row.length - 1 - i : i) * k, y + j * k, k, k); } }
+      }
+      // crisp pixel text: rasterise once, threshold the alpha (no anti-aliasing), cache
+      const tcache = new Map();
+      function textBmp(str, size, color) {
+        const key = `${str}|${size}|${color}`; if (tcache.has(key)) return tcache.get(key);
+        const c = document.createElement("canvas"), x = c.getContext("2d"); x.font = `400 ${size}px "Press Start 2P"`;
+        c.width = Math.max(1, Math.ceil(x.measureText(str).width)); c.height = size;
+        x.font = `400 ${size}px "Press Start 2P"`; x.textBaseline = "top"; x.fillStyle = color; x.fillText(str, 0, 0);
+        const img = x.getImageData(0, 0, c.width, c.height), d = img.data;
+        for (let i = 3; i < d.length; i += 4) d[i] = d[i] >= 110 ? 255 : 0;
+        x.putImageData(img, 0, 0); tcache.set(key, c); return c;
+      }
+      function txt(str, x, y, size, color, { align = "left", shadow = null } = {}) {
+        const b = textBmp(str, size, color); x = Math.round(align === "center" ? x - b.width / 2 : align === "right" ? x - b.width : x); y = Math.round(y);
+        if (shadow) g.drawImage(textBmp(str, size, shadow), x + 1, y + 1);
+        g.drawImage(b, x, y); return b.width;
+      }
+      const fitSize = (str, maxW) => (str.length * 16 <= maxW ? 16 : 8);
+      const box = (x, y, w, h, fill = P.navy, border = P.cream) => { R(x, y, w, h, border); R(x + 2, y + 2, w - 4, h - 4, fill); };
+      const stepT = (t, fps = 12) => MP.stepTime(t, fps);
+
+      // ---------- original sprites ----------
+      const HERO_TOP = [
+        ".....KKKKKK.....", "....KWWWWWWK....", "...KWWWWWWWWK...", "...KWWWWWWWWK...", "....KKKKKKKK....",
+        "....KSSSSSSK....", "....KSSKSSKK....", "....KSSSSSSK....", ".....KSSSSK.....", "....KPPPPPPK....",
+        "...KSPWWWWPSK...", "...KSPWWWWPSK...", "....KPWWWWPK....",
+      ];
+      const LEGS = [
+        ["....KNNKKNNK....", "....KNK..KNK....", "....KK....KK...."],
+        ["....KNNNNNK.....", "...KNK...KNK....", "..KK......KK...."],
+        ["....KNNKKNNK....", "....KNK..KNK....", "....KK....KK...."],
+        ["....KNNNNNK.....", ".....KNKKNK.....", ".....KKKKK......"],
+      ];
+      const LEGS_JUMP = ["...KNNK..KNNK...", "..KNK......KNK..", "..KK........KK.."];
+      const heroPal = { K: P.navy, W: P.white, S: P.skin, P: P.pink, N: P.navy };
+      const heroPow = { K: P.navy, W: P.yellow, S: P.cream, P: P.cyan, N: P.orange };
+      const hero = (x, y, frame, pal = heroPal, k = 1) => spr([...HERO_TOP, ...(frame < 0 ? LEGS_JUMP : LEGS[frame % 4])], pal, x, y, k);
+
+      const GIFT = [
+        "KKKKKKKKKKKKKKKK", "KOOOOOOPPOOOOOOK", "KOOOOOOPPOOOOOOK", "KOOOOOOPPOOOOOOK", "KPPPPPPPPPPPPPPK", "KOOOOOOPPOOOOOOK",
+        "KOOOOKKPPKKOOOOK", "KOOOOOOPKKOOOOOK", "KOOOOOOPKKOOOOOK", "KOOOOOOKKOOOOOOK", "KOOOOOOPPOOOOOOK", "KOOOOOOKKOOOOOOK",
+        "KOOOOOOPPOOOOOOK", "KOOOOOOPPOOOOOOK", "KOOOOOOPPOOOOOOK", "KKKKKKKKKKKKKKKK",
+      ];
+      const USED = GIFT.map((r) => r.replace(/[OP]/g, "U"));
+      const BISCUIT = [
+        "KKKKKKKKKKKKKKKK", "KBBBBBBBBBBBBBBK", "KBDBBBBBBBBBDBBK", "KBBBBBBDBBBBBBBK", "KBBBBBBBBBBBBBBK", "KBBBDBBBBBBDBBBK",
+        "KBBBBBBBBBBBBBBK", "KBBBBBBBBDBBBBBK", "KBDBBBBBBBBBBBBK", "KBBBBBBBBBBBBDBK", "KBBBBDBBBBBBBBBK", "KBBBBBBBBBBBBBBK",
+        "KBBBBBBBDBBBBBBK", "KBBDBBBBBBBBBDBK", "KBBBBBBBBBBBBBBK", "KKKKKKKKKKKKKKKK",
+      ];
+      const blockPal = { K: P.navy, O: P.orange, P: P.yellow, U: P.brown, B: P.sponge, D: P.brown };
+      const ITEMS = [
+        { rows: ["....YY....", "....RR....", ".KKKKKKKK.", ".KCCCCCCK.", ".KPPPPPPK.", "KCCCCCCCCK", "KPPPPPPPPK", "KSSSSSSSSK", "KKKKKKKKKK"],     // cake
+          pal: { K: P.navy, Y: P.yellow, R: P.jam, C: P.cream, P: P.pink, S: P.sponge } },
+        { rows: ["..KKKKKK..", ".KSSSSSSK.", "KSSDSSSDSK", "KSSSSSSSSK", "KSDSSSDSSK", "KSSSSSSSSK", "KSSSDSSSDK", ".KSSSSSSK.", "..KKKKKK.."],   // cookie
+          pal: { K: P.navy, S: P.sponge, D: P.brown } },
+        { rows: ["...KKKK...", ".KKSSSSKK.", "KSSCSSCSSK", "KSSSCSSCSK", "KSSSSSSSSK", "KBBBBBBBBK", "KBBBBBBBBK", ".KKKKKKKK."],                    // bread
+          pal: { K: P.navy, S: P.sponge, C: P.cream, B: P.brown } },
+      ];
+      const COIN = [
+        ["..KKKK..", ".KYYYYK.", "KYYWYYYK", "KYYWYYYK", "KYYWYYYK", "KYYYYYYK", ".KYYYYK.", "..KKKK.."],
+        ["...KK...", "..KYYK..", "..KWYK..", "..KWYK..", "..KWYK..", "..KYYK..", "..KYYK..", "...KK..."],
+        ["...KK...", "...KK...", "...KK...", "...KK...", "...KK...", "...KK...", "...KK...", "...KK..."],
+        ["...KK...", "..KYYK..", "..KYWK..", "..KYWK..", "..KYWK..", "..KYYK..", "..KYYK..", "...KK..."],
+      ];
+      const coinPal = { K: P.navy, Y: P.yellow, W: P.white };
+      const STAR = ["....K....", "...KYK...", "...KYK...", "KKKYYYKKK", "KYYYWYYYK", ".KYYYYYK.", "..KYYYK..", ".KYYKYYK.", "KYK...KYK", "KK.....KK"];
+      const starPal = { K: P.navy, Y: P.yellow, W: P.white };
+      const SPARK = [["..C..", "..C..", "CCWCC", "..C..", "..C.."], [".....", "..C..", ".CWC.", "..C..", "....."]];
+
+      // ---------- the level: scripted path in world coordinates ----------
+      const G = LH - SAFE_B - 6;                                  // ground line (top of the cake)
+      const HX = Math.round(LW * 0.24);                           // hero x on screen
+      const RUN0 = T.select + 0.25, STOP = T.star + 0.15, SPEED = 42;
+      const heroX = (t) => SPEED * (MP.clamp(t, RUN0, STOP) - RUN0);
+      const camX = (t) => Math.floor(heroX(t)) - HX;
+      const JUMP_H = 34, DOWN = 0.32;    // rise to the block, bonk, fall
+      function heroY(t) {
+        for (let i = 1; i <= 3; i++) { const j = T["jump" + i], b = T["block" + i]; if (t < j || t > b + DOWN) continue;
+          if (t <= b) { const u = (t - j) / (b - j); return -JUMP_H * (1 - (1 - u) * (1 - u)); }
+          const u = (t - b) / DOWN; return -JUMP_H * (1 - u * u); }
+        return 0;
+      }
+      const BLOCKS = [1, 2, 3].map((i) => ({ i, t: T["block" + i], x: Math.round(heroX(T["block" + i])) }));
+      const BLOCK_Y = G - 16 - JUMP_H - 16;                       // the hero's head meets the block's underside at the top of the jump
+      const COINS = [1, 2, 3, 4].map((i) => ({ t: T["coin" + i], x: Math.round(heroX(T["coin" + i])) + 4, y: G - 14 - (i % 2) * 4 }));
+      const STAR_X = Math.round(heroX(T.star)) + 4, SHOP_X = Math.round(heroX(STOP)) + 34;
+      const BAR_Y = SAFE_T + 2, BAR_H = GAME.proof ? 46 : 26;
+      const slotX = (i) => 8 + i * 22, SLOT_Y = BAR_Y + 4;
+
+      // decorations along the ground, seeded once
+      const rnd = MP.rng(77), DECO = [];
+      for (let x = -40; x < SHOP_X - 30; x += 46 + Math.floor(rnd() * 30)) DECO.push({ x, kind: Math.floor(rnd() * 3) });
+      const SPRINK = Array.from({ length: 24 }, () => ({ x: Math.floor(rnd() * 48), y: 1 + Math.floor(rnd() * 3), c: [P.pink, P.cyan, P.yellow, P.mint][Math.floor(rnd() * 4)] }));
+
+      function drawWorld(t) {
+        const cx = camX(t);
+        R(0, 0, LW, LH, P.sky);
+        // meringue clouds (slowest)
+        for (let k = -1; k < LW / 70 + 2; k++) { const x = k * 70 - (Math.floor(cx * 0.2) % 70), y = SAFE_T + 60 + ((k + 40) % 3) * 14;
+          R(x + 6, y, 26, 8, P.cream); R(x, y + 4, 38, 8, P.cream); R(x + 10, y - 4, 12, 6, P.cream); R(x, y + 11, 38, 2, P.white); }
+        // frosting hills with drips (middle)
+        for (let k = -1; k < LW / 60 + 2; k++) { const x0 = k * 60 - (Math.floor(cx * 0.5) % 60), c = k % 2 ? P.pink : P.mint, r = 24 + (Math.abs(k) % 2) * 8;
+          for (let y = 0; y < r; y++) { const hw = Math.floor(Math.sqrt(r * r - (r - y) * (r - y))); R(x0 + 30 - hw, G - r + y, hw * 2, 1, c); }
+          R(x0 + 30 - 10, G - r + 6, 4, 6, P.cream); R(x0 + 30 + 4, G - r + 4, 4, 9, P.cream); }
+        // ground: cream top with sprinkles, sponge, jam, sponge (full speed)
+        R(0, G, LW, 5, P.cream); R(0, G + 5, LW, LH - G, P.sponge); R(0, G + 14, LW, 3, P.jam); R(0, G + 17, LW, 2, P.cream); R(0, G + 30, LW, LH, P.brown);
+        for (let k = -1; k < LW / 48 + 2; k++) { const x0 = k * 48 - (((cx % 48) + 48) % 48); for (const s of SPRINK) R(x0 + s.x, G + s.y, 2, 1, s.c); }
+        // props: lollipop, cupcake, candy cane
+        for (const d of DECO) { const x = d.x - cx; if (x < -20 || x > LW + 20) continue;
+          if (d.kind === 0) { R(x + 5, G - 22, 2, 22, P.cream); for (let y = 0; y < 12; y++) { const hw = Math.floor(Math.sqrt(36 - (y - 6) * (y - 6) + 0.1)); R(x + 6 - hw, G - 34 + y, hw * 2, 1, y % 4 < 2 ? P.pink : P.white); } }
+          else if (d.kind === 1) { R(x, G - 10, 14, 10, P.orange); for (let i = 0; i < 14; i += 3) R(x + i, G - 10, 1, 10, P.brown); R(x - 1, G - 15, 16, 5, P.pink); R(x + 2, G - 19, 10, 4, P.pink); R(x + 6, G - 22, 2, 3, P.jam); }
+          else { R(x + 4, G - 24, 3, 24, P.white); for (let y = 0; y < 24; y += 5) R(x + 4, G - 24 + y, 3, 2, P.jam); R(x + 7, G - 24, 5, 3, P.white); R(x + 10, G - 22, 3, 5, P.jam); } }
+        // the little bakery shop at the end of the level
+        const sx = SHOP_X - cx;
+        if (sx < LW + 10) { R(sx, G - 50, 56, 50, P.cream); R(sx - 3, G - 62, 62, 4, P.navy);
+          for (let i = 0; i < 62; i += 8) { R(sx - 3 + i, G - 58, 4, 9, P.pink); R(sx + 1 + i, G - 58, 4, 9, P.white); }
+          R(sx + 6, G - 40, 16, 14, P.navy); R(sx + 8, G - 38, 12, 10, P.cyan); R(sx + 32, G - 32, 16, 32, P.brown); R(sx + 44, G - 18, 2, 2, P.yellow);
+          R(sx + 8, G - 74, 40, 12, P.navy); txt("SHOP", sx + 28, G - 72, 8, P.yellow, { align: "center" }); }
+      }
+
+      function drawBlocks(t) {
+        const cx = camX(t);
+        for (const b of BLOCKS) {
+          const x = b.x - cx, bump = t >= b.t && t < b.t + 0.24 ? [2, 4, 2][Math.floor(((t - b.t) / 0.24) * 3)] : 0;
+          spr(BISCUIT, blockPal, x - 16, BLOCK_Y); spr(BISCUIT, blockPal, x + 16, BLOCK_Y);
+          spr(t >= b.t ? USED : GIFT, blockPal, x, BLOCK_Y - bump);
+        }
+      }
+      // feature items: pop out, label box, fly into the inventory, stay there
+      function drawItems(t) {
+        const cx = camX(t);
+        BLOCKS.forEach((b, i) => {
+          if (t < b.t || i >= GAME.features.length) return;
+          const it = ITEMS[i % ITEMS.length], a = t - b.t, x0 = b.x - cx + 3, y0 = BLOCK_Y - 2;
+          if (a < 1.15) {
+            const rise = Math.floor(MP.clamp(stepT(a) / 0.3) * 18);
+            spr(it.rows, it.pal, x0, y0 - 9 - rise);
+            if (a > 0.2) { const label = GAME.features[i], w = label.length * 8 + 10, bx = MP.clamp(x0 + 5 - w / 2, 4, LW - 4 - w);
+              box(bx, y0 - 46, w, 14); txt(label, bx + w / 2, y0 - 43, 8, P.cyan, { align: "center" }); }
+          } else if (a < 1.55) {
+            const u = MP.clamp(stepT(a - 1.15) / 0.4), sx = slotX(i) + 3, sy = SLOT_Y + 3;   // stepped flight to the slot
+            spr(it.rows, it.pal, Math.round(MP.lerp(x0, sx, u)), Math.round(MP.lerp(y0 - 27, sy, u) - Math.sin(u * Math.PI) * 20));
+          }
+        });
+      }
+      function drawTopBar(t) {
+        box(4, BAR_Y, LW - 8, BAR_H);
+        for (let i = 0; i < 3; i++) { R(slotX(i) - 1, SLOT_Y - 1, 18, 18, P.cream); R(slotX(i), SLOT_Y, 16, 16, P.grey);
+          const b = BLOCKS[i]; if (b && i < GAME.features.length && t >= b.t + 1.55) spr(ITEMS[i].rows, ITEMS[i].pal, slotX(i) + 3, SLOT_Y + 3); }
+        if (GAME.proof) {
+          let got = 0, f = 0; COINS.forEach((c) => { if (t >= c.t) got++; }); if (got) f = MP.clamp((t - COINS[got - 1].t) / 0.2);
+          const v = Math.round(((got - 1 + f) / COINS.length) * GAME.proof.value), shown = got ? Math.max(0, v) : 0, done = got === COINS.length && f >= 1;
+          spr(COIN[0], coinPal, 72, SLOT_Y + 4);
+          txt(shown.toLocaleString("en-US") + (done ? GAME.proof.suffix || "" : ""), 84, SLOT_Y + 4, 8, P.yellow);
+          txt(GAME.proof.label, LW / 2, SLOT_Y + 24, 8, P.cream, { align: "center" });
+        }
+      }
+      function drawLevel(t) {
+        drawWorld(t); drawBlocks(t);
+        const cx = camX(t);
+        for (const c of COINS) { if (t >= c.t) { if (t < c.t + 0.3) spr(SPARK[Math.floor((t - c.t) * 12) % 2], { C: P.yellow, W: P.white }, c.x - cx + 1, c.y - 4 - Math.floor((t - c.t) * 30)); continue; }
+          spr(COIN[Math.floor(t * 8) % 4], coinPal, c.x - cx, c.y); }
+        if (t < T.star) spr(STAR, starPal, STAR_X - cx, G - 26 - (Math.floor(t * 4) % 2) * 2);
+        drawItems(t);
+        // hero: run cycle 8 fps, jump frame in the air, power-up flash after the star
+        const moving = t > RUN0 && t < STOP, y = Math.round(heroY(t)), fr = y < 0 ? -1 : moving ? Math.floor(t * 8) % 4 : 0;
+        const pow = t >= T.star && t < T.star + 0.6 && Math.floor((t - T.star) * 10) % 2 === 0;
+        hero(HX, G - 16 + y, fr, pow ? heroPow : heroPal);
+        if (t >= T.star) for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283 + Math.floor(t * 6) * 0.5, r = 14 + (k % 2) * 6;
+          if ((Math.floor(t * 8) + k) % 3) spr(SPARK[(Math.floor(t * 8) + k) % 2], { C: k % 2 ? P.cyan : P.yellow, W: P.white }, HX + 6 + Math.round(Math.cos(a) * r), G - 10 + Math.round(Math.sin(a) * r)); }
+        drawTopBar(t);
+        // finale dialog: LEVEL UP!, then the call to action and the handle
+        if (t >= T.levelup) {
+          const w = Math.round(LW * 0.86), grow = MP.clamp(stepT(t - T.levelup) / 0.15), h = Math.max(6, Math.round(76 * grow)), x = Math.round((LW - w) / 2), yc = Math.round(BAR_Y + BAR_H + (G - 60 - BAR_Y - BAR_H) / 2);
+          box(x, yc - h / 2, w, h);
+          if (grow >= 1) {
+            const lines = t < T.cta ? ["LEVEL", "UP!"] : GAME.cta.split(/\s+/), sz = Math.min(...lines.map((s) => fitSize(s, w - 12)));
+            const col = t < T.cta ? P.yellow : (Math.floor((t - T.cta) * 6) % 2 ? P.yellow : P.cyan);
+            const by = yc - 30 + (t >= T.cta && GAME.handle ? 0 : 6);
+            lines.forEach((s, i) => txt(s, LW / 2, by + i * (sz + 6), sz, col, { align: "center" }));
+            if (t >= T.cta && GAME.handle) txt(GAME.handle, LW / 2, yc + 22, 8, P.cream, { align: "center" });
+          }
+        }
+      }
+
+      // ---------- PLAYER 1 character-select card ----------
+      function drawCard(t, dy) {
+        R(0, dy, LW, LH, P.navy);
+        for (let y = 0; y < LH; y += 8) for (let x = (y / 8) % 2 ? 4 : 0; x < LW; x += 8) R(x, dy + y, 1, 1, P.grey);  // dotted backdrop
+        const cw = LW - 20, ch = 222, x = 10, y = dy + Math.round((LH - ch) / 2);
+        box(x, y, cw, ch, P.navy, P.yellow); R(x + 3, y + 3, cw - 6, 1, P.orange);
+        txt("PLAYER 1", LW / 2, y + 8, 8, P.yellow, { align: "center" });
+        box(LW / 2 - 28, y + 20, 56, 56, P.sky, P.cream);
+        hero(LW / 2 - 24, y + 24, Math.floor(t * 3) % 2 ? 0 : 2, heroPal, 3);
+        // name types in, one letter at a time
+        const n = Math.max(0, Math.min(GAME.name.length, Math.floor((t - T.name) / 0.08) + 1)), words = GAME.name.split(/\s+/);
+        const typed = GAME.name.slice(0, t >= T.name ? n : 0), sz = Math.min(...words.map((s) => fitSize(s, cw - 12)));
+        let used = 0; words.forEach((wd, i) => { const part = typed.slice(used, used + wd.length); used += wd.length + 1;
+          if (part) txt(part, LW / 2 - (wd.length * sz) / 2, y + 84 + i * (sz + 4), sz, P.cream, { shadow: P.orange }); });
+        if (GAME.role && t >= T.name + GAME.name.length * 0.08) txt(GAME.role, LW / 2, y + 126, 8, P.cyan, { align: "center" });
+        // stat bars fill one segment at a time
+        GAME.stats.slice(0, 3).forEach(([label, val], i) => {
+          const sy = y + 144 + i * 14, p = MP.clamp((t - T["stat" + (i + 1)]) / 0.5), segs = Math.floor(p * MP.clamp(val, 0, 10));
+          txt(label.slice(0, 5), x + 8, sy, 8, P.cream);
+          for (let s = 0; s < 10; s++) R(x + 56 + s * 9, sy, 8, 8, s < segs ? [P.grass, P.yellow, P.pink][i] : P.grey);
+        });
+        // PRESS START blinks with the blips, flashes when pressed
+        const on = [1, 2, 3].some((k) => t >= T["start" + k] && t < T["start" + k] + 0.24) || (t >= T.select && Math.floor((t - T.select) * 12) % 2 === 0);
+        if (on) txt("PRESS START", LW / 2, y + ch - 20, 8, P.yellow, { align: "center" });
+      }
+
+      // circle wipe: black outside a stepped-radius circle, built from rows (crisp edge)
+      function circleMask(cx, cy, r) {
+        r = Math.floor(r / 3) * 3;
+        for (let y = 0; y < LH; y++) { const dy = y + 0.5 - cy, hw = dy * dy < r * r ? Math.floor(Math.sqrt(r * r - dy * dy)) : -1;
+          if (hw < 0) { R(0, y, LW, 1, P.black); continue; } R(0, y, Math.round(cx - hw), 1, P.black); R(Math.round(cx + hw), y, LW, 1, P.black); }
+      }
+      const RMAX = Math.ceil(Math.hypot(LW, LH));
+
+      function draw(t) {
+        const slide = MP.clamp(stepT(t - T.select) / 0.5), dy = -Math.floor(slide * LH / 8) * 8;   // card slides up in 8 px steps
+        if (t >= T.select) drawLevel(t);
+        if (slide < 1) drawCard(t, dy);
+        if (t < T.wipein + 0.55) circleMask(LW / 2, LH / 2, RMAX * MP.clamp((t - T.wipein) / 0.55));
+        if (t >= T.wipeout) circleMask(HX + 8, G - 8, RMAX * (1 - MP.clamp((t - T.wipeout) / (D - 0.08 - T.wipeout))));
+        out.drawImage(low.c, 0, 0, LW * S, LH * S);
+      }
+      MP.onSeek(draw, { tl, duration: D });
+      window.__timelines["main"] = tl;
+    });
+  </script>
+</body>
+</html>

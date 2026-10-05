@@ -65,14 +65,17 @@ ratios: {"9:16":"good","4:5":"great","1:1":"great","16:9":"great"}
   {"id": "jump", "repeat": {"n": 3, "fromFrac": 0.42, "everyFrac": 0.12}, "label": "hero jumps to a block"},
   {"id": "block", "repeat": {"n": 3, "fromFrac": 0.45, "everyFrac": 0.12}, "label": "block bump, item pops"},
   {"id": "coin", "repeat": {"n": 4, "fromFrac": 0.78, "everyFrac": 0.02}, "label": "coins collected"},
-  {"id": "star", "at": 0.86, "label": "hero grabs the star, power-up"},
-  {"id": "levelup", "at": 0.9, "label": "LEVEL UP dialog"},
-  {"id": "cta", "at": 0.94, "label": "call to action"},
-  {"id": "wipeout", "at": 0.97, "label": "circle wipe shuts on the hero"}
+  {"id": "star", "at": 0.85, "label": "hero grabs the star, power-up"},
+  {"id": "levelup", "at": 0.88, "label": "LEVEL UP dialog"},
+  {"id": "cta", "at": 0.917, "label": "call to action"},
+  {"id": "wipeout", "at": 0.963, "label": "circle wipe shuts on the hero"}
 ]}
 ```
 
+Timing note: the call to action gets about 0.7 s before the closing wipe at 15 s (`cta` 0.917, `wipeout` 0.963); the earlier 0.94 / 0.97 left under half a second, too short to read.
+
 ## Build recipe
+- **Finished build:** `examples/pixel-art/` (9:16, 15 s, fictional demo brand). `scripts/make.mjs pixel-art ...` reuses it. It reads `CONTENT.game` (`name`, `role`, `stats`, `features`, `proof`, `cta`, `handle`) and falls back to `--text "Name|Role|Feature 1|Feature 2|Feature 3"` and `--key "CTA"`; put real stats, proof figure and handle in `content.mjs` `game`, then `make.mjs --project <dir>`.
 - **Pixel pipeline:** `LOW = { w: Math.round(W / s), h: Math.round(H / s) }` with `s` = 5 or 6 (choose so the low-res height is about 180 to 320); draw everything with `fillRect` on integer coordinates; scale to the output with `imageSmoothingEnabled = false`. No anti-aliased text: Press Start 2P at sizes that are multiples of 8 low-res px.
 - **Sprites:** define hero, blocks, items, coins as small string-array bitmaps mapped to palette letters; a helper `spr(rows, palette, x, y)` draws them. Animate by swapping frames (`floor(t * fps) % n`).
 - **Parallax:** three background layers (clouds, hills, ground) whose x offset = `-(speed * t) mod tileWidth`; speeds 0.2, 0.5, 1.0.
@@ -87,7 +90,7 @@ How each effect of the brief is covered (8-bit chip sounds timed to the action):
 - **Soft ticks as my name types in, rising ticks as each stat bar fills:** `typing` at `name`; `ticks` (rising) at `stat*`.
 - **A blip each time PRESS START blinks, and a short select jingle when it is pressed:** `blip` at `start*`; `run` of `coin` at `select`.
 - **A whoosh as the card slides away:** `whoosh` at `select`.
-- **A springy boing on every jump and a soft thud on landing:** `boing` at `jump*`, `thud` shortly after.
+- **A springy boing on every jump and a soft thud on landing:** `boing` at `jump*`, `thud` at `block*+0.32` (the hero lands 0.32 s after bumping the block).
 - **A solid bump on each block with a bright little reveal jingle for each item, one step higher each time:** `thud` + `run` of `lead` notes at `block*` with rising pitch.
 - **A bright blip for each collectible with quick counter ticks:** `coin` at `coin*` + `tick`.
 - **A twinkly power-up, a short level-up fanfare and a "ding ding" as the call to action appears:** `run` (up) + `sparkle` at `star`, a `run` of `square` notes at `levelup`, `ding` twice at `cta`.
@@ -100,7 +103,7 @@ How each effect of the brief is covered (8-bit chip sounds timed to the action):
   {"at": "select", "kind": "run", "inst": "coin", "n": 1, "vol": 0.7},
   {"at": "select", "kind": "whoosh", "dir": "up", "dur": 0.5, "vol": 0.4},
   {"at": "jump*", "kind": "boing", "freq": 300, "dur": 0.3, "vol": 0.5},
-  {"at": "jump*+0.3", "kind": "thud", "freq": 90, "dur": 0.1, "vol": 0.45},
+  {"at": "block*+0.32", "kind": "thud", "freq": 90, "dur": 0.1, "vol": 0.45},
   {"at": "block*", "kind": "thud", "freq": 120, "dur": 0.12, "vol": 0.7},
   {"at": "block*+0.1", "kind": "run", "inst": "lead", "from": "C5", "n": 3, "dt": 0.07, "scale": "major", "len": 0.2, "vol": 0.55},
   {"at": "coin*", "kind": "coin", "vol": 0.6},

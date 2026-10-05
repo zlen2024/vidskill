@@ -25,7 +25,7 @@ node $S/scripts/make.mjs --project videos/04_promo --final       # after hand-ed
 ```
 
 `make.mjs` runs scaffold, builds `index.html`, runs `check`, renders (draft by default, `--final` for delivery), confirms the MP4 has H.264 video, AAC audio and the right length, and writes a frame sheet (`renders/<slug>.draft.sheet.png`: open it and look before you deliver).
-- **Ready-made builds** (`examples/<slug>/`: `kinetic-type`, `retro-synthwave`, `logo-spin-3d`) are grafted onto the fresh scaffold, so the user's text, brand colours, ratio and length apply with no hand coding.
+- **Ready-made builds** (`examples/<slug>/`: `kinetic-type`, `retro-synthwave`, `logo-spin-3d`, `pixel-art`) are grafted onto the fresh scaffold, so the user's text, brand colours, ratio and length apply with no hand coding.
 - **Every other style**: `make.mjs` scaffolds, then stops and says so. Build `index.html` from the style file (workflow below), then finish with `make.mjs --project <dir>`. When a build turns out well, save it as `examples/<slug>/` so the next request is one command.
 - `--repeat phrase=auto` sets a repeat beat's count to the number of `--text` lines (or `phrase=4`), keeping its time window, so sound and visuals follow the real content. Other options: `--no-check`, `--strict` (stop on check errors), `--no-sheet`, `--allow-placeholder`.
 
@@ -149,7 +149,7 @@ Adding a style: drop `<slug>.md` into the right category skill's `styles/`, add 
 | `scripts/make.mjs` | One command: scaffold, build from an example, check, render, verify, frame sheet |
 | `scripts/scaffold.mjs` `prompt.mjs` `synth.mjs` `fonts.mjs` `frames.mjs` `compare.mjs` `audio-report.mjs` `audit.mjs` `smoke-all.mjs` | Tools (all Node, no dependencies) |
 | `templates/base/` | Composition skeleton and the `MP` helper kit (`lib/mp.js`) |
-| `examples/<slug>/` | Finished builds (`kinetic-type`, `retro-synthwave`, `logo-spin-3d`): `make.mjs` reuses them; copy their structure for new styles |
+| `examples/<slug>/` | Finished builds (`kinetic-type`, `retro-synthwave`, `logo-spin-3d`, `pixel-art`): `make.mjs` reuses them; copy their structure for new styles |
 | `ATTRIBUTION.md` | Source and licence caveat |
 
 ## Non-negotiables (learned the hard way)

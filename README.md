@@ -38,7 +38,7 @@ node motionprompt-styles/scripts/make.mjs kinetic-type --out videos/promo --rati
      --text "Make it move|Say it loud|Own the beat" --key "Make it move" --repeat phrase=auto [--final]
 ```
 
-Scaffolds the project, builds it (for styles with a finished example: `kinetic-type`, `retro-synthwave`, `logo-spin-3d`), checks, renders and verifies the MP4, and writes a frame sheet. For other styles it scaffolds and stops; build `index.html`, then run `make.mjs --project videos/promo`.
+Scaffolds the project, builds it (for styles with a finished example: `kinetic-type`, `retro-synthwave`, `logo-spin-3d`, `pixel-art`), checks, renders and verifies the MP4, and writes a frame sheet. For other styles it scaffolds and stops; build `index.html`, then run `make.mjs --project videos/promo`.
 
 ## Dependencies between skills
 - `motionprompt-<category>` skills hold only style recipes: they need `motionprompt-styles` (scripts, templates, rules, `categories.json`) installed next to them.
