@@ -31,6 +31,15 @@ One folder with every skill built for the Manim / HyperFrames video channel. Cop
 | [`motionprompt-product-brand`](motionprompt-product-brand/SKILL.md) | Trigger when the user wants a short video (5-30 s) in one of these looks: 3D logo spin, Product turntable, App showcase, Floating 3D icons, Editorial portfolio, Photo studio, Photo slideshow, Liquid gradient, Particle field. ... |
 | [`motionprompt-malaysia-festive`](motionprompt-malaysia-festive/SKILL.md) | Trigger when the user wants a short video (5-30 s) in one of these looks: Batik fashion, Borneo rainforest, Chinese heritage, Deepavali, Festive Raya, Kampung sunset, Kopitiam, Malaysian heritage, Merdeka, Pasar malam, Food menu. ... |
 
+## Make a video in one command
+
+```bash
+node motionprompt-styles/scripts/make.mjs kinetic-type --out videos/promo --ratio 9:16 --duration 8 \
+     --text "Make it move|Say it loud|Own the beat" --key "Make it move" --repeat phrase=auto [--final]
+```
+
+Scaffolds the project, builds it (for styles with a finished example: `kinetic-type`, `retro-synthwave`, `logo-spin-3d`), checks, renders and verifies the MP4, and writes a frame sheet. For other styles it scaffolds and stops; build `index.html`, then run `make.mjs --project videos/promo`.
+
 ## Dependencies between skills
 - `motionprompt-<category>` skills hold only style recipes: they need `motionprompt-styles` (scripts, templates, rules, `categories.json`) installed next to them.
 - `motionprompt-*` and `manim-hyperframes-vertical` render through HyperFrames: install the HyperFrames skills (`hyperframes`, `hyperframes-core`, `hyperframes-cli`, ...) from their own source.

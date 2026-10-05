@@ -34,13 +34,15 @@ if (!files.length) { console.error("no frames extracted"); process.exit(1); }
 const rows = Math.ceil(files.length / cols), sheet = file.replace(/\.[^.]+$/, "") + ".sheet.png";
 const inputs = files.flatMap((f) => ["-i", f]);
 // simple grid with hstack per row then vstack
-let filter = "", rowsOut = [];
+// filler for the last row = a blacked-out copy of a real frame, so it always has the exact scaled size (lavfi color rounds odd heights)
+const pad = (cols - (files.length % cols)) % cols;
+let filter = pad ? `[${files.length}:v]drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill${pad > 1 ? `,split=${pad}` : ""}${Array.from({ length: pad }, (_, k) => `[f${k}]`).join("")};` : "", rowsOut = [];
 for (let r = 0; r < rows; r++) {
   const idx = files.map((_, i) => i).filter((i) => Math.floor(i / cols) === r), n = idx.length;
-  const pad = cols - n, ins = idx.map((i) => `[${i}:v]`).join("") + (pad ? Array.from({ length: pad }, () => `[${files.length}:v]`).join("") : "");
+  const ins = idx.map((i) => `[${i}:v]`).join("") + Array.from({ length: cols - n }, (_, k) => `[f${k}]`).join("");
   filter += `${ins}hstack=inputs=${cols}[r${r}];`; rowsOut.push(`[r${r}]`);
 }
-const extra = files.length % cols ? ["-f", "lavfi", "-i", `color=c=black:s=${w}x${Math.round(w * 1.7778)}`] : [];   // black filler for the last row
+const extra = pad ? ["-i", files[0]] : [];
 filter += rows > 1 ? `${rowsOut.join("")}vstack=inputs=${rows}` : `${rowsOut[0]}null`;   // a single row needs no vstack
 const r = spawnSync("ffmpeg", ["-y", "-v", "error", ...inputs, ...extra, "-filter_complex", filter, "-frames:v", "1", sheet], { encoding: "utf8" });
 if (r.status !== 0) { console.error("sheet failed:", r.stderr.slice(0, 400)); process.exit(1); }

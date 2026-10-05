@@ -11,6 +11,10 @@ metadata:
 
 Node 22+ (24 here), FFmpeg, Chrome, `npx hyperframes` (v0.8.96 pinned by the scaffold), network the first time (npm cache at `~/.cache/motionprompt-vendor`). RAM is tight (about 2 GB free): render with `-w 1`, one render at a time.
 
+## Shortcut: `scripts/make.mjs`
+
+`node <skill>/scripts/make.mjs <slug> --out <dir> [scaffold options] [--repeat id=auto] [--final]` runs steps 2 to 5 in one go when the style has a finished build in `examples/<slug>/`. For other styles it scaffolds and stops; build `index.html` (step 3), then `make.mjs --project <dir> [--final]` regenerates the sound and runs check, render, ffprobe and the frame sheet. You still look at the sheet and report as in step 6.
+
 ## 1. Understand and choose
 
 1. Read the user's request. Identify: the **message** (exact words), **style**, **ratio**, **length**, **sound**, **assets** (photos, logo, screenshots, audio), **brand colours**, **language**.

@@ -2,6 +2,7 @@
 // Create a ready-to-build HyperFrames project for one MotionPrompt style.
 //   node scaffold.mjs <slug> --out <dir> [--ratio 9:16|4:5|1:1|16:9] [--duration 8] [--short 1080]
 //        [--text "Line one|Line two"] [--lang en|ms] [--sound off|effects|music] [--brand "bg=#10131f,accent=#ff5a4e"] [--no-lint] [--assets-only]
+//        [--repeat phrase=auto]   (resize a repeat beat to N items, or to the number of --text lines, keeping its time window)
 // Produces: index.html (placeholder build), timing.mjs (beat sheet in seconds, shared by visuals AND sound), content.mjs, cues.mjs,
 //           assets/{vendor,fonts,audio}, lib/mp.js, BRIEF.md (directive checklist), package.json/hyperframes.json/meta.json.
 import fs from "node:fs";
@@ -13,8 +14,8 @@ import { vendorFonts, loadSpecs } from "./fonts.mjs";
 import { vendorGsap, vendorThree, ensure, pkgDir, copy } from "./vendor.mjs";
 
 const a = process.argv.slice(2), val = (n, d) => { const i = a.indexOf(`--${n}`); return i >= 0 ? a[i + 1] : d; }, flag = (n) => a.includes(`--${n}`);
-const slug = a.find((x, i) => !x.startsWith("--") && !["--out", "--ratio", "--duration", "--short", "--text", "--lang", "--sound", "--brand", "--key"].includes(a[i - 1]));
-if (!slug || !val("out")) { console.error("usage: node scaffold.mjs <slug> --out <dir> [--ratio 9:16] [--duration 8] [--short 1080] [--text 'A|B'] [--key 'Slogan'] [--lang en|ms] [--sound off|effects|music] [--brand 'bg=#..,accent=#..'] [--no-lint]"); process.exit(1); }
+const slug = a.find((x, i) => !x.startsWith("--") && !["--out", "--ratio", "--duration", "--short", "--text", "--lang", "--sound", "--brand", "--key", "--repeat"].includes(a[i - 1]));
+if (!slug || !val("out")) { console.error("usage: node scaffold.mjs <slug> --out <dir> [--ratio 9:16] [--duration 8] [--short 1080] [--text 'A|B'] [--key 'Slogan'] [--lang en|ms] [--sound off|effects|music] [--brand 'bg=#..,accent=#..'] [--repeat id=N|auto] [--no-lint]"); process.exit(1); }
 
 const st = parseStyle(styleFile(slug)), out = path.resolve(val("out"));
 const ratio = val("ratio", "9:16"), D = parseFloat(val("duration", st.meta.default_duration ?? 8)), short = parseInt(val("short", "1080"), 10);
@@ -66,7 +67,19 @@ if (flag("assets-only")) {
 }
 
 // ---- timing, content ----
-const beats = st.blocks.beats || { events: [] };
+const beats = structuredClone(st.blocks.beats || { events: [] });
+// --repeat phrase=3 (or phrase=auto = number of --text lines): change a repeat event's count, keeping the window it spans
+for (const kv of (val("repeat", "") || "").split(",").filter(Boolean)) {
+  const [id, nv] = kv.split("="), e = beats.events?.find((x) => x.id === id && x.repeat);
+  if (!e) { console.error(`--repeat: no repeat event "${id}" in ${slug} (have: ${(beats.events || []).filter((x) => x.repeat).map((x) => x.id).join(", ") || "none"})`); process.exit(1); }
+  const n = nv === "auto" ? (val("text", "") || "").split("|").map((s) => s.trim()).filter(Boolean).length : parseInt(nv, 10);
+  if (!(n > 0)) { console.error(`--repeat ${kv}: count must be > 0 (auto needs --text)`); process.exit(1); }
+  const r = e.repeat, k = r.n / n;
+  if (r.everyBeat !== undefined) r.everyBeat = Math.min(Math.max(1, Math.floor(r.everyBeat * k + 1e-9)), r.everyBeat * 2);   // whole beats, never past the original window
+  if (r.everySec !== undefined) r.everySec = +(r.everySec * k).toFixed(3);
+  if (r.everyFrac !== undefined) r.everyFrac = +(r.everyFrac * k).toFixed(4);
+  r.n = n;
+}
 const bpm = fitBpm(beats.bpm || 0, D);                 // tempo snapped to whole beats: visuals + music share it exactly
 const T = resolveBeats(beats, D, bpm);
 fs.writeFileSync(path.join(out, "timing.mjs"),

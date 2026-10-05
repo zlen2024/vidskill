@@ -50,7 +50,7 @@
     const { $ } = MP;
     const W = 1080, H = 1920;
     const HOR = Math.round(H * 0.6);                         // horizon y (9:16 recipe)
-    const words = (CONTENT.lines[0] || "NEON NIGHTS").toUpperCase().split(/\s+/);
+    const said = (CONTENT.lines[0] || "NEON NIGHTS").toUpperCase(), words = W >= H ? [said] : said.split(/\s+/);   // square / wide frames: one headline line
 
     MP.fontsReady(['900 40px "Orbitron"']).then(() => {
       const tl = gsap.timeline({ paused: true });
@@ -71,14 +71,15 @@
         return pts;
       }
       const ridges = [ridge(-1, 11), ridge(1, 23)];
-      const R = W * 0.3, sunX = W / 2, sunY = HOR - R * 0.96;  // bottom of the disc sits on the horizon, the striped lower half stays visible
+      const R = Math.min(W * 0.3, H * 0.17), sunX = W / 2, sunY = HOR - R * 0.96;  // bottom of the disc sits on the horizon, the striped lower half stays visible
 
       // sun with stripes (offscreen so destination-out only affects the sun)
       const sun = MP.canvas(null, Math.round(R * 2), Math.round(R * 2)), sctx = sun.ctx;
       const STRIPE_PITCH = 32;                                 // 8 s * 12 px/s = 96 px = 3 pitches -> periodic in D
 
       // headline: offscreen, chrome gradient, drawn once per line
-      const lineSize = Math.min(...words.map((w) => MP.fitLine(w, '"Orbitron"', 900, W * 0.84)), 230);
+      const lineSize = Math.min(...words.map((w) => MP.fitLine(w, '"Orbitron"', 900, W * 0.84)), 230, H * 0.12,
+        (sunY - R - H * 0.08 - 40) / (words.length * 1.15));   // headline must fit between the top margin and the sun
       const head = MP.canvas(null, W, Math.round(words.length * lineSize * 1.15) + 40), hctx = head.ctx;
       const HEAD_Y = Math.round(sunY - R - H * 0.03 - head.c.height);   // headline sits above the sun
       function drawHeadline(mode) {                            // mode: "chrome" | "red" | "cyan"
