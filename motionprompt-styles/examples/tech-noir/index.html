@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920, height=1080" />
+  <title>Tech noir</title>
+  <script src="assets/vendor/gsap.min.js"></script>
+  <script src="lib/mp.js"></script>
+
+  <style>
+    /* ---- fonts (vendored, local @font-face is required by lint) ---- */
+    @font-face { font-family: "Instrument Serif"; font-style: normal; font-weight: 400; font-display: block; src: url("assets/fonts/instrument-serif-latin-400-normal.woff2") format("woff2"); }
+    @font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: block; src: url("assets/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+    @font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: block; src: url("assets/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); }
+    /* ---- design tokens: style defaults, brand colours override these ---- */
+    :root {
+      --u: 1px;                         /* 1 design unit: author sizes as calc(N * var(--u)) so 720p drafts match 1080p */
+      --safe-t: calc(64 * var(--u));  /* platform UI safe areas for this aspect ratio */
+      --safe-b: calc(72 * var(--u));
+      --safe-x: calc(96 * var(--u));
+      --bg: #120c09;
+      --ink: #efe6dc;
+      --line: #6b635c;
+      --accent: #ff8a3d;
+      --accent2: #ffb070;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+    #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
+    .layer { position: absolute; inset: 0; }
+    .safe { padding: var(--safe-t) var(--safe-x) var(--safe-b); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    /* set data-guides="1" on #root while designing to see the safe area, remove before render */
+    #root[data-guides="1"] .safe { outline: calc(3 * var(--u)) dashed rgba(255, 0, 180, .7); outline-offset: calc(-2 * var(--u)); }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="15" data-width="1920" data-height="1080">
+    <!-- Layer order (back to front): background -> scene -> text -> fx overlay. Keep timed media OUT of wrappers that carry data-start. -->
+    <div id="bg" class="layer"></div>
+    <div id="scene" class="layer"></div>
+    <div id="text" class="layer safe"></div>
+    <div id="fx" class="layer"></div>
+    <audio id="mix" src="assets/audio/mix.wav" data-start="0" data-duration="15" data-track-index="9" data-volume="1"></audio>
+  </div>
+
+  <script type="module">
+    import { D, T } from "./timing.mjs";
+    import { CONTENT } from "./content.mjs";
+    const { $, E } = MP;
+    const W = 1920, H = 1080;
+
+    // ---------- words (CONTENT.film, else defaults) ----------
+    const F0 = CONTENT.film || {};
+    const FILM = {
+      globe: F0.globe || ["you · here", "compute · region", "partners · worldwide"],
+      devices: F0.devices || ["data · store", "gpu · cluster", "eval · suite", "training · run"],
+      chip: F0.chip || ["model · core", "attention · heads"],
+      code: F0.code || ["token", "embed", "attn", "0x7f", "grad", "softmax", "sync", "weights"],
+      key: CONTENT.key || "Built to think.",
+      sub: (CONTENT.lines || [])[0] || "",
+    };
+
+    MP.fontsReady(['400 80px "Instrument Serif"', '400 24px "JetBrains Mono"', '500 24px "JetBrains Mono"']).then(() => {
+      const tl = gsap.timeline({ paused: true });
+      const C = { bg: MP.css("--bg"), ink: MP.css("--ink"), line: MP.css("--line"), amber: MP.css("--accent"), amber2: MP.css("--accent2") };
+      const cv = MP.canvas($("#scene"), W, H), ctx = cv.ctx;
+      cv.c.setAttribute("data-layout-allow-overflow", "");        // full-bleed film frame
+      const K = Math.min(W, H) / 1080, TALL = H > W;
+      const clamp = MP.clamp, sm = MP.smooth;
+      const fade = (t, a, d = 0.8) => sm((t - a) / d);              // 0 -> 1 from a over d
+
+      // ---------- camera: never stops; tilts down and pushes in a little more each scene ----------
+      const S2 = (t) => sm((t - (T.s2 - 0.6)) / 1.6), S3 = (t) => sm((t - (T.s3 - 0.6)) / 1.6);
+      function cam(t) {
+        return {
+          ry: 0.32 * Math.sin(t * 0.13) + 0.045 * t - 0.25,
+          rx: -0.18 - 0.32 * S2(t) - 0.42 * S3(t) + 0.04 * Math.sin(t * 0.31),
+          zoom: (TALL ? 0.78 : 1) * (1 + 0.004 * t + 0.06 * (S2(t) + S3(t))),
+          cx: W / 2 + Math.sin(t * 0.21) * 22 * K, cy: H * (TALL ? 0.44 : 0.5) + Math.cos(t * 0.17) * 12 * K,
+        };
+      }
+      const DIST = 1700 * K;
+      function proj([x, y, z], c) {
+        const cy_ = Math.cos(c.ry), sy = Math.sin(c.ry), cx_ = Math.cos(c.rx), sx = Math.sin(c.rx);
+        const x1 = x * cy_ + z * sy, z1 = -x * sy + z * cy_;
+        const y2 = y * cx_ - z1 * sx, z2 = y * sx + z1 * cx_;
+        const f = (DIST / (DIST + z2)) * c.zoom;
+        return [c.cx + x1 * f, c.cy - y2 * f, z2, f];
+      }
+
+      // glow by double stroke (wide soft + thin bright), no shadowBlur in the hot path
+      function stroke(pts, color, w, a, glow = false) {
+        if (pts.length < 2) return;
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        if (glow) { ctx.globalAlpha = a * 0.18; ctx.strokeStyle = color; ctx.lineWidth = w * 6; ctx.stroke(); }
+        ctx.globalAlpha = a; ctx.strokeStyle = color; ctx.lineWidth = w; ctx.stroke();
+      }
+      function dot(x, y, r, color, a, glow = false) {
+        if (glow) { ctx.globalAlpha = a * 0.16; ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r * 4, 0, 6.2832); ctx.fill(); }
+        ctx.globalAlpha = a; ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
+      }
+      // tiny lowercase mono label with a leader line, typed in
+      function label(text, x, y, t0, t, a, side = 1) {
+        if (t < t0 || a <= 0) return;
+        const n = Math.min(text.length, Math.floor((t - t0) / 0.035) + 1), lx = x + side * 46 * K, ly = y - 34 * K;
+        ctx.globalAlpha = a * 0.8; ctx.strokeStyle = C.line; ctx.lineWidth = 1.2 * K;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(lx, ly); ctx.lineTo(lx + side * 14 * K, ly); ctx.stroke();
+        ctx.font = `400 ${Math.round(24 * K)}px "JetBrains Mono", monospace`; ctx.textBaseline = "middle"; ctx.textAlign = side > 0 ? "left" : "right";
+        ctx.globalAlpha = a * 0.9; ctx.fillStyle = C.ink; ctx.fillText(text.slice(0, n), lx + side * 22 * K, ly);
+      }
+
+      // ---------- scene 1: dotted globe, arcs from the lab ----------
+      const GR = 330 * K, GN = 950;
+      const GLOBE = Array.from({ length: GN }, (_, i) => { const y = 1 - (2 * (i + 0.5)) / GN, r = Math.sqrt(1 - y * y), th = i * 2.399963; return [Math.cos(th) * r, y, Math.sin(th) * r]; });
+      const ll = (lat, lon) => [Math.cos(lat) * Math.sin(lon), Math.sin(lat), -Math.cos(lat) * Math.cos(lon)];
+      const spinY = (p, a) => [p[0] * Math.cos(a) + p[2] * Math.sin(a), p[1], -p[0] * Math.sin(a) + p[2] * Math.cos(a)];
+      const norm = (p) => { const l = Math.hypot(...p); return p.map((v) => v / l); };
+      const slerp = (a, b, s) => { const d = clamp(a[0] * b[0] + a[1] * b[1] + a[2] * b[2], -1, 1), om = Math.acos(d), so = Math.sin(om) || 1e-6;
+        return [0, 1, 2].map((k) => (Math.sin((1 - s) * om) * a[k] + Math.sin(s * om) * b[k]) / so); };
+      const YOU = ll(0.32, -0.55), TARGETS = [ll(0.75, 0.35), ll(-0.2, 0.75), ll(-0.6, -0.35), ll(-0.15, 0.2), ll(0.5, 0.95)];
+      const ARC_T = 0.5;                                            // seconds an arc takes to land (the ping lands with it)
+      function globe(t, a) {
+        if (a <= 0) return;
+        const c = cam(t), g = 0.12 * t, toS = (p, s = 1) => proj(spinY(p, g).map((v) => v * GR * s), c);
+        for (const p of GLOBE) { const [x, y, z] = toS(p), front = clamp(0.5 - z / (2 * GR)); dot(x, y, (1.1 + 1.3 * front) * K, C.line, a * (0.2 + 0.8 * front)); }
+        const ring = []; for (let k = 0; k <= 96; k++) ring.push(toS(ll(0, (k / 96) * 6.2832))); stroke(ring, C.line, 1 * K, a * 0.25);  // equator
+        TARGETS.forEach((tg, i) => {
+          const t0 = T["arc" + (i + 1)]; if (t < t0) return;
+          const u = clamp((t - t0) / ARC_T), path = [], lift = 0.08 + 0.22 * Math.acos(clamp(YOU[0] * tg[0] + YOU[1] * tg[1] + YOU[2] * tg[2], -1, 1)) / Math.PI;
+          for (let k = 0; k <= 40; k++) { const s = (k / 40) * u, p = norm(slerp(YOU, tg, s)); path.push(toS(p, 1 + lift * Math.sin(Math.PI * s))); }
+          stroke(path, u < 1 ? C.amber : C.line, 1.4 * K, a * (u < 1 ? 0.95 : 0.55), u < 1);
+          if (u < 1) { const h = path[path.length - 1]; dot(h[0], h[1], 3 * K, C.amber2, a, true); }
+          else { const [x, y] = toS(tg), age = t - t0 - ARC_T; dot(x, y, 3 * K, C.amber, a, true);
+            if (age < 1.2) { ctx.globalAlpha = a * (1 - age / 1.2) * 0.8; ctx.strokeStyle = C.amber; ctx.lineWidth = 1.3 * K; ctx.beginPath(); ctx.arc(x, y, (4 + age * 40) * K, 0, 6.2832); ctx.stroke(); } }
+        });
+        const [yx, yy] = toS(YOU), pul = 0.5 + 0.5 * Math.sin(t * 5);
+        dot(yx, yy, (4 + 1.5 * pul) * K, C.amber, a, true);
+        label(FILM.globe[0], yx, yy, 0.5, t, a, -1);
+        const [ax, ay] = toS(TARGETS[1]); label(FILM.globe[1], ax, ay, T.arc2 + ARC_T, t, a);
+        const [bx, by] = toS(TARGETS[0]); label(FILM.globe[2], bx, by, T.arc1 + ARC_T + 0.3, t, a);
+      }
+
+      // ---------- scene 2: three isometric GPU racks joined by a cable ----------
+      const RW = 170 * K, RH = 300 * K, RD = 150 * K, FLOOR = -170 * K, GAP = TALL ? 230 * K : 360 * K;
+      const RACKS = [-GAP, 0, GAP].map((x, i) => ({ x, z: i === 1 ? -40 * K : 60 * K }));
+      const CABLE = [[-GAP, 60 * K - RD / 2], [-GAP, -230 * K], [GAP, -230 * K], [GAP, 60 * K - RD / 2]].map(([x, z]) => [x, FLOOR, z]);
+      const STUB = [[0, FLOOR, -230 * K], [0, FLOOR, -40 * K - RD / 2]];
+      const segLen = CABLE.slice(1).map((p, i) => Math.hypot(p[0] - CABLE[i][0], p[2] - CABLE[i][2])), cableLen = segLen.reduce((s, v) => s + v, 0);
+      function onCable(u) { let d = u * cableLen; for (let i = 0; i < segLen.length; i++) { if (d <= segLen[i]) { const k = d / segLen[i], A = CABLE[i], B = CABLE[i + 1]; return A.map((v, j) => v + (B[j] - v) * k); } d -= segLen[i]; } return CABLE[CABLE.length - 1]; }
+      const PULSE_T = 1.4;
+      function devices(t, a) {
+        if (a <= 0) return;
+        const c = cam(t), P = (p) => proj(p, c);
+        // floor grid, very faint
+        for (let k = -6; k <= 6; k++) { stroke([P([k * 110 * K, FLOOR, -420 * K]), P([k * 110 * K, FLOOR, 360 * K])], C.line, 1 * K, a * 0.12); stroke([P([-660 * K, FLOOR, k * 65 * K]), P([660 * K, FLOOR, k * 65 * K])], C.line, 1 * K, a * 0.12); }
+        stroke(CABLE.map(P), C.line, 1.6 * K, a * 0.8); stroke(STUB.map(P), C.line, 1.6 * K, a * 0.8);
+        RACKS.forEach((r, i) => {
+          const x0 = r.x - RW / 2, x1 = r.x + RW / 2, z0 = r.z - RD / 2, z1 = r.z + RD / 2, y0 = FLOOR, y1 = FLOOR + RH;
+          const v = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]].map(P);
+          ctx.globalAlpha = a * 0.05; ctx.fillStyle = C.ink; ctx.beginPath(); [0, 1, 2, 3].forEach((k, j) => (j ? ctx.lineTo : ctx.moveTo).call(ctx, v[k][0], v[k][1])); ctx.fill();
+          for (const [p, q] of [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) stroke([v[p], v[q]], C.line, 1.2 * K, a * 0.85);
+          // rack units on the front face, LEDs glow amber once the first pulse has reached them
+          const live = t >= T.pulse1 + PULSE_T * (i === 0 ? 0 : i === 1 ? 0.5 : 1);
+          for (let u = 1; u < 8; u++) { const yy = y0 + (u / 8) * RH; stroke([P([x0 + 10 * K, yy, z0]), P([x1 - 34 * K, yy, z0])], C.line, 1 * K, a * 0.4);
+            const on = live && MP.hash(u * 7 + i * 31 + Math.floor(t * (i === 1 ? 9 : 4)), 3) > 0.35, [lx, ly] = P([x1 - 18 * K, yy - 10 * K, z0]);
+            dot(lx, ly, 2.2 * K, on ? C.amber : C.line, a * (on ? 1 : 0.5), on); }
+          const [tx, ty] = P([r.x, y1, z0]); label(FILM.devices[i], tx, ty, T.s2 + 0.4 + i * 0.3, t, a, i === 0 ? -1 : 1);
+        });
+        // light pulses travelling the cable, each with a short trail
+        for (let k = 1; k <= 5; k++) { const t0 = T["pulse" + k]; if (t < t0 || t > t0 + PULSE_T) continue;
+          const u = (t - t0) / PULSE_T, trail = []; for (let j = 0; j <= 8; j++) trail.push(P(onCable(clamp(u - j * 0.012))));
+          stroke(trail, C.amber, 2 * K, a, true); const [hx, hy] = trail[0]; dot(hx, hy, 3.5 * K, C.amber2, a, true); }
+        const [cx2, cy2] = P(onCable(0.5)); label(FILM.devices[3], cx2, cy2, T.s2 + 1.6, t, a);
+      }
+
+      // ---------- scene 3: circuit board, chip cells flicker, code words drift up ----------
+      const rnd = MP.rng(909), CH = 130 * K, CELL = (2 * CH) / 4;
+      const TRACES = Array.from({ length: 28 }, (_, i) => {
+        const side = i % 4, k = (Math.floor(i / 4) - 3) * 34 * K + (rnd() - 0.5) * 10 * K, out = (200 + rnd() * 230) * K, bend = (rnd() - 0.5) * 220 * K, mid = CH + (40 + rnd() * 80) * K;
+        const pts = side === 0 ? [[CH, k], [mid, k], [mid + 40 * K, k + bend], [out + CH, k + bend]] : side === 1 ? [[-CH, k], [-mid, k], [-mid - 40 * K, k + bend], [-out - CH, k + bend]]
+          : side === 2 ? [[k, CH], [k, mid], [k + bend, mid + 40 * K], [k + bend, out + CH]] : [[k, -CH], [k, -mid], [k + bend, -mid - 40 * K], [k + bend, -out - CH]];
+        return { pts: pts.map(([x, z]) => [x, 0, z]), ph: rnd(), live: rnd() > 0.45 };
+      });
+      const WORDS = FILM.code.map((w, i) => ({ w, p: [(rnd() - 0.5) * 760 * K, 0, (rnd() - 0.5) * 520 * K], t0: T.s3 + 0.6 + i * 0.32 }));
+      function circuit(t, a) {
+        if (a <= 0) return;
+        const c = cam(t), P = (p) => proj(p, c), B = 520 * K;
+        stroke([[-B, 0, -B], [B, 0, -B], [B, 0, B], [-B, 0, B], [-B, 0, -B]].map(P), C.line, 1.2 * K, a * 0.4);
+        const lit = (t - T.cell1) > 0;
+        for (const tr of TRACES) { const pts = tr.pts.map(P); stroke(pts, C.line, 1.2 * K, a * 0.7); const e = pts[pts.length - 1];
+          ctx.globalAlpha = a * 0.7; ctx.strokeStyle = C.line; ctx.lineWidth = 1.2 * K; ctx.beginPath(); ctx.arc(e[0], e[1], 4 * K, 0, 6.2832); ctx.stroke();
+          if (lit && tr.live) { const u = ((t - T.cell1) * 0.55 + tr.ph) % 1, seg = Math.min(2, Math.floor(u * 3)), k = u * 3 - seg, A = tr.pts[seg], Bp = tr.pts[seg + 1];
+            const [x, y] = P(A.map((v, j) => v + (Bp[j] - v) * k)); dot(x, y, 2.6 * K, C.amber, a * fade(t, T.cell1, 0.6), true); } }
+        // chip body and its 4x4 cells
+        const chip = [[-CH, 0, -CH], [CH, 0, -CH], [CH, 0, CH], [-CH, 0, CH]].map(P);
+        ctx.globalAlpha = a * 0.06; ctx.fillStyle = C.ink; ctx.beginPath(); chip.forEach((p, j) => (j ? ctx.lineTo : ctx.moveTo).call(ctx, p[0], p[1])); ctx.fill();
+        stroke([...chip, chip[0]], C.ink, 1.5 * K, a * 0.8);
+        for (let k = 0; k < 16; k++) {
+          const cx = -CH + (k % 4) * CELL, cz = -CH + Math.floor(k / 4) * CELL, g = 7 * K;
+          const q = [[cx + g, 0, cz + g], [cx + CELL - g, 0, cz + g], [cx + CELL - g, 0, cz + CELL - g], [cx + g, 0, cz + CELL - g]].map(P);
+          const on = t >= T["cell" + (1 + Math.floor((k * 6) / 16))] && MP.hash(k + Math.floor(t * 6) * 17, 5) > 0.28;
+          if (on) { ctx.globalAlpha = a * 0.5; ctx.fillStyle = C.amber; ctx.beginPath(); q.forEach((p, j) => (j ? ctx.lineTo : ctx.moveTo).call(ctx, p[0], p[1])); ctx.fill(); }
+          stroke([...q, q[0]], on ? C.amber : C.line, 1 * K, a * (on ? 0.95 : 0.5), on);
+        }
+        ctx.font = `400 ${Math.round(22 * K)}px "JetBrains Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        for (const w of WORDS) { const age = t - w.t0; if (age < 0 || age > 2.2) continue; const [x, y] = P(w.p);
+          ctx.globalAlpha = a * Math.sin((age / 2.2) * Math.PI) * 0.75; ctx.fillStyle = C.amber2; ctx.fillText(w.w, x, y - age * 34 * K); }
+        const [l1x, l1y] = P([CH, 0, CH]); label(FILM.chip[0], l1x, l1y, T.s3 + 0.5, t, a);
+        const e = TRACES[1].pts[3], [l2x, l2y] = P(e); label(FILM.chip[1], l2x, l2y, T.s3 + 1.3, t, a, -1);
+      }
+
+      // ---------- particle headline: fly in, glow, dissolve into dust ----------
+      const words = FILM.key.split(/\s+/), lines = TALL && words.length > 1 ? [words.slice(0, Math.ceil(words.length / 2)).join(" "), words.slice(Math.ceil(words.length / 2)).join(" ")] : [FILM.key];
+      const HS = Math.min(...lines.map((s) => MP.fitLine(s, '"Instrument Serif"', 400, W * (TALL ? 0.84 : 0.72), { max: 260 * K }))), LHgt = HS * 1.02;
+      const HY = H * (TALL ? 0.56 : 0.47) - ((lines.length - 1) * LHgt) / 2;
+      const off = MP.canvas(null, W, H), o = off.ctx;
+      o.font = `400 ${HS}px "Instrument Serif"`; o.textAlign = "center"; o.textBaseline = "middle"; o.fillStyle = "#fff";
+      lines.forEach((s, i) => o.fillText(s, W / 2, HY + i * LHgt));
+      const img = o.getImageData(0, 0, W, H).data, cand = [], STEP = Math.max(2, Math.round(3 * K));
+      for (let y = 0; y < H; y += STEP) for (let x = 0; x < W; x += STEP) if (img[(y * W + x) * 4 + 3] > 140) cand.push([x, y]);
+      const every = Math.max(1, Math.floor(cand.length / 2600)), prnd = MP.rng(4711);
+      const PARTS = cand.filter((_, i) => i % every === 0).map(([x, y], i) => { const ang = prnd() * 6.2832, r = (280 + prnd() * 700) * K;
+        return { x, y, sx: x + Math.cos(ang) * r, sy: y + Math.sin(ang) * r * 0.6, d: prnd() * 0.5, s: (1.2 + prnd() * 1.3) * K, n: prnd() * 100 }; });
+      function headline(t) {
+        if (t < T.form) return;
+        const glow = fade(t, T.glow, 0.9), dt = Math.max(0, t - T.dust), gone = clamp(dt / (D - 0.2 - T.dust));
+        for (const p of PARTS) {
+          const k = E.outCubic(clamp((t - T.form - p.d) / 1.3)); if (k <= 0) continue;
+          let x = MP.lerp(p.sx, p.x, k) + MP.noise1(p.n + t * 0.8) * 1.5 * K, y = MP.lerp(p.sy, p.y, k) + MP.noise1(p.n + 50 + t * 0.8) * 1.5 * K;
+          if (dt > 0) { x += MP.noise1(p.n * 0.37 + dt * 0.6, 9) * 90 * K * dt; y -= (28 * dt + 22 * dt * dt) * K * (0.6 + (p.n % 1)); }
+          const a = Math.min(1, k * 1.4) * (1 - gone) * (0.55 + 0.45 * (1 - glow * 0.5));
+          ctx.globalAlpha = a; ctx.fillStyle = glow > 0.02 && p.n % 3 < 1 ? C.amber2 : C.ink; ctx.fillRect(x, y, p.s, p.s);
+        }
+        // the glowing words themselves, crisp and readable while held, gone as the dust starts
+        const ta = glow * (1 - fade(t, T.dust, 0.5));
+        if (ta > 0) { ctx.save(); ctx.font = `400 ${HS}px "Instrument Serif"`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.shadowColor = C.amber; ctx.shadowBlur = 36 * K; ctx.globalAlpha = ta * 0.9; ctx.fillStyle = C.ink;
+          lines.forEach((s, i) => ctx.fillText(s, W / 2, HY + i * LHgt)); ctx.restore(); }
+        if (FILM.sub) { const sa = fade(t, T.glow, 0.5) * (1 - fade(t, T.dust, 0.6));
+          if (sa > 0) { ctx.font = `400 ${Math.round(28 * K)}px "JetBrains Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.globalAlpha = sa * 0.95; ctx.fillStyle = C.amber2; ctx.fillText(FILM.sub, W / 2, HY + (lines.length - 1) * LHgt + HS * 0.62 + 30 * K); } }
+      }
+
+      const GRAIN = MP.grainTile(5, 256);
+      function draw(t) {
+        ctx.globalAlpha = 1; ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+        globe(t, fade(t, 0, 1.0) * (1 - fade(t, T.s2 - 0.4)));
+        devices(t, fade(t, T.s2 - 0.4) * (1 - fade(t, T.s3 - 0.4)));
+        circuit(t, fade(t, T.s3 - 0.4) * (1 - fade(t, T.form - 0.3)));
+        headline(t);
+        ctx.globalAlpha = 1;
+        const vg = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.hypot(W, H) / 2);   // gentle vignette, many stops
+        for (let k = 0; k <= 8; k++) { const u = k / 8; vg.addColorStop(u, `rgba(0,0,0,${(0.6 * u * u * u).toFixed(3)})`); }
+        ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+        MP.drawGrain(ctx, GRAIN, t, W, H, { fps: 24, alpha: 0.07 });   // fine seeded grain dithers the near-black gradient (no banding rings)
+      }
+      MP.onSeek(draw, { tl, duration: D });
+      window.__timelines["main"] = tl;
+    });
+  </script>
+</body>
+</html>

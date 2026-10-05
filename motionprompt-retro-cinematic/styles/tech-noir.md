@@ -68,6 +68,8 @@ ratios: {"9:16":"good","4:5":"good","1:1":"good","16:9":"great"}
 ```
 
 ## Build recipe
+- **Finished build:** `examples/tech-noir/` (16:9, 15 s, placeholder AI lab). `scripts/make.mjs tech-noir ...` reuses it; scene labels and code words come from `CONTENT.film`.
+- **Banding:** add a fine seeded grain (`MP.drawGrain`, alpha about 0.07) over the vignette, or the near-black gradient shows rings after encoding.
 - **Projection:** define points in 3D (x, y, z), apply the global camera matrix (rotateY, rotateX, translate, perspective divide) in a helper `proj(p, t)`; all scene geometry goes through it, so the camera drift is free.
 - **Globe:** Fibonacci-sphere dots (seeded/deterministic); dot alpha by depth (`z`), front hemisphere brighter. Arcs = great-circle interpolation lifted radially, drawn with a travelling glow head (`dashOffset` by `t`).
 - **Devices:** isometric boxes via 3 rhombi each; the cable is a polyline; pulses are points travelling a fixed path with `u = ((t - t0) / d) % 1`.
