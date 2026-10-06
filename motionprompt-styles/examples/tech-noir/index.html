@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="ms">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=1920, height=1080" />
+  <meta name="viewport" content="width=1080, height=1920" />
   <title>Tech noir</title>
   <script src="assets/vendor/gsap.min.js"></script>
   <script src="lib/mp.js"></script>
@@ -15,9 +15,9 @@
     /* ---- design tokens: style defaults, brand colours override these ---- */
     :root {
       --u: 1px;                         /* 1 design unit: author sizes as calc(N * var(--u)) so 720p drafts match 1080p */
-      --safe-t: calc(64 * var(--u));  /* platform UI safe areas for this aspect ratio */
-      --safe-b: calc(72 * var(--u));
-      --safe-x: calc(96 * var(--u));
+      --safe-t: calc(220 * var(--u));  /* platform UI safe areas for this aspect ratio */
+      --safe-b: calc(300 * var(--u));
+      --safe-x: calc(64 * var(--u));
       --bg: #120c09;
       --ink: #efe6dc;
       --line: #6b635c;
@@ -25,7 +25,7 @@
       --accent2: #ffb070;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+    html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
     #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
     .layer { position: absolute; inset: 0; }
     .safe { padding: var(--safe-t) var(--safe-x) var(--safe-b); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
@@ -34,7 +34,7 @@
   </style>
 </head>
 <body>
-  <div id="root" data-composition-id="main" data-start="0" data-duration="15" data-width="1920" data-height="1080">
+  <div id="root" data-composition-id="main" data-start="0" data-duration="15" data-width="1080" data-height="1920">
     <!-- Layer order (back to front): background -> scene -> text -> fx overlay. Keep timed media OUT of wrappers that carry data-start. -->
     <div id="bg" class="layer"></div>
     <div id="scene" class="layer"></div>
@@ -47,7 +47,7 @@
     import { D, T } from "./timing.mjs";
     import { CONTENT } from "./content.mjs";
     const { $, E } = MP;
-    const W = 1920, H = 1080;
+    const W = 1080, H = 1920;
 
     // ---------- words (CONTENT.film, else defaults) ----------
     const F0 = CONTENT.film || {};
@@ -57,7 +57,7 @@
       chip: F0.chip || ["model · core", "attention · heads"],
       code: F0.code || ["token", "embed", "attn", "0x7f", "grad", "softmax", "sync", "weights"],
       key: CONTENT.key || "Built to think.",
-      sub: (CONTENT.lines || [])[0] || "",
+      sub: (CONTENT.lines || []).filter(Boolean),            // small lines under the headline (tagline, price, link)
     };
 
     MP.fontsReady(['400 80px "Instrument Serif"', '400 24px "JetBrains Mono"', '500 24px "JetBrains Mono"']).then(() => {
@@ -75,7 +75,7 @@
         return {
           ry: 0.32 * Math.sin(t * 0.13) + 0.045 * t - 0.25,
           rx: -0.18 - 0.32 * S2(t) - 0.42 * S3(t) + 0.04 * Math.sin(t * 0.31),
-          zoom: (TALL ? 0.78 : 1) * (1 + 0.004 * t + 0.06 * (S2(t) + S3(t))),
+          zoom: (TALL ? 0.95 : 1) * (1 + 0.004 * t + 0.06 * (S2(t) + S3(t))),
           cx: W / 2 + Math.sin(t * 0.21) * 22 * K, cy: H * (TALL ? 0.44 : 0.5) + Math.cos(t * 0.17) * 12 * K,
         };
       }
@@ -100,12 +100,15 @@
         ctx.globalAlpha = a; ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
       }
       // tiny lowercase mono label with a leader line, typed in
-      function label(text, x, y, t0, t, a, side = 1) {
+      function label(text, x, y, t0, t, a, side = 1, rise = 0) {
         if (t < t0 || a <= 0) return;
-        const n = Math.min(text.length, Math.floor((t - t0) / 0.035) + 1), lx = x + side * 46 * K, ly = y - 34 * K;
+        const fs = Math.round((TALL ? 30 : 24) * K);
+        ctx.font = `400 ${fs}px "JetBrains Mono", monospace`; const tw = ctx.measureText(text).width, M = 28 * K;
+        if (side > 0 && x + 68 * K + tw > W - M) side = -1; else if (side < 0 && x - 68 * K - tw < M) side = 1;   // never run off the frame
+        const n = Math.min(text.length, Math.floor((t - t0) / 0.035) + 1), lx = x + side * 46 * K, ly = y - (34 + rise) * K;
         ctx.globalAlpha = a * 0.8; ctx.strokeStyle = C.line; ctx.lineWidth = 1.2 * K;
         ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(lx, ly); ctx.lineTo(lx + side * 14 * K, ly); ctx.stroke();
-        ctx.font = `400 ${Math.round(24 * K)}px "JetBrains Mono", monospace`; ctx.textBaseline = "middle"; ctx.textAlign = side > 0 ? "left" : "right";
+        ctx.font = `400 ${fs}px "JetBrains Mono", monospace`; ctx.textBaseline = "middle"; ctx.textAlign = side > 0 ? "left" : "right";
         ctx.globalAlpha = a * 0.9; ctx.fillStyle = C.ink; ctx.fillText(text.slice(0, n), lx + side * 22 * K, ly);
       }
 
@@ -138,6 +141,7 @@
         label(FILM.globe[0], yx, yy, 0.5, t, a, -1);
         const [ax, ay] = toS(TARGETS[1]); label(FILM.globe[1], ax, ay, T.arc2 + ARC_T, t, a);
         const [bx, by] = toS(TARGETS[0]); label(FILM.globe[2], bx, by, T.arc1 + ARC_T + 0.3, t, a);
+        if (FILM.globe[3]) { const [cx3, cy3] = toS(TARGETS[2]); label(FILM.globe[3], cx3, cy3, T.arc3 + ARC_T, t, a, -1, -60); }   // lower left, clear of the others
       }
 
       // ---------- scene 2: three isometric GPU racks joined by a cable ----------
@@ -164,7 +168,7 @@
           for (let u = 1; u < 8; u++) { const yy = y0 + (u / 8) * RH; stroke([P([x0 + 10 * K, yy, z0]), P([x1 - 34 * K, yy, z0])], C.line, 1 * K, a * 0.4);
             const on = live && MP.hash(u * 7 + i * 31 + Math.floor(t * (i === 1 ? 9 : 4)), 3) > 0.35, [lx, ly] = P([x1 - 18 * K, yy - 10 * K, z0]);
             dot(lx, ly, 2.2 * K, on ? C.amber : C.line, a * (on ? 1 : 0.5), on); }
-          const [tx, ty] = P([r.x, y1, z0]); label(FILM.devices[i], tx, ty, T.s2 + 0.4 + i * 0.3, t, a, i === 0 ? -1 : 1);
+          const [tx, ty] = P([r.x, y1, z0]); label(FILM.devices[i], tx, ty, T.s2 + 0.4 + i * 0.3, t, a, i === 0 ? -1 : 1, TALL && i === 1 ? 90 : 0);   // tall frames: lift the middle label above its neighbours
         });
         // light pulses travelling the cable, each with a short trail
         for (let k = 1; k <= 5; k++) { const t0 = T["pulse" + k]; if (t < t0 || t > t0 + PULSE_T) continue;
@@ -236,9 +240,11 @@
         if (ta > 0) { ctx.save(); ctx.font = `400 ${HS}px "Instrument Serif"`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
           ctx.shadowColor = C.amber; ctx.shadowBlur = 36 * K; ctx.globalAlpha = ta * 0.9; ctx.fillStyle = C.ink;
           lines.forEach((s, i) => ctx.fillText(s, W / 2, HY + i * LHgt)); ctx.restore(); }
-        if (FILM.sub) { const sa = fade(t, T.glow, 0.5) * (1 - fade(t, T.dust, 0.6));
-          if (sa > 0) { ctx.font = `400 ${Math.round(28 * K)}px "JetBrains Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.globalAlpha = sa * 0.95; ctx.fillStyle = C.amber2; ctx.fillText(FILM.sub, W / 2, HY + (lines.length - 1) * LHgt + HS * 0.62 + 30 * K); } }
+        if (FILM.sub.length) { const sa = fade(t, T.glow, 0.5) * (1 - fade(t, T.dust, 0.6));
+          if (sa > 0) { const fs = Math.round((TALL ? 36 : 28) * K); ctx.font = `400 ${fs}px "JetBrains Mono", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            FILM.sub.forEach((s, k) => { const la = sa * clamp((t - T.glow - k * 0.35) / 0.4);                // lines appear one after another
+              ctx.globalAlpha = la * 0.95; ctx.fillStyle = k === FILM.sub.length - 1 && FILM.sub.length > 1 ? C.amber : k === 0 ? C.ink : C.amber2;
+              ctx.fillText(s, W / 2, HY + (lines.length - 1) * LHgt + HS * 0.62 + 30 * K + k * fs * 1.7); }); } }
       }
 
       const GRAIN = MP.grainTile(5, 256);
